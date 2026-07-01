@@ -1,0 +1,19 @@
+node_modules/
+.env
+.env.local
+*.env
+*.env.*
+dist/
+.next/
+coverage/
+*.log
+.DS_Store
+
+# Notas internas de desarrollo — no deben subirse al repo
+CONTEXTO-DEV.md
+PREGUNTAS-CLIENTE.md
+
+# Mockups de diseño viejos (Stitch) y datos mock sin usar — no son parte de la app
+temp_zip_extract/
+stitch_idea_uno_os.zip
+backend/db_mock.json
