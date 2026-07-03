@@ -1,56 +1,234 @@
-import { Controller, Get, Post, Patch, Body, Query, Param, UseGuards, Request, ForbiddenException } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Query,
+  Param,
+  UseGuards,
+  Request,
+  ForbiddenException,
+} from '@nestjs/common';
 import { AdvisorsService } from './advisors.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/role.enum';
-import { IsEmail, IsNotEmpty, IsNumber, IsOptional, IsString, IsIn } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  Max,
+  Min,
+} from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  CLABE,
+  CURP,
+  EmptyToUndefined,
+  FECHA_ISO,
+  MAX_EMAIL,
+  MAX_MONTO,
+  MAX_NOMBRE,
+  MAX_TEXTO_CORTO,
+  MAX_TEXTO_LARGO,
+  MSG,
+  RFC,
+  SOLO_LETRAS,
+  TELEFONO_MX,
+} from '../../common/validation/patterns';
+
+const ADVISOR_STATUSES = [
+  'Activo',
+  'En mentoría',
+  'Inactivo',
+  'Baja definitiva',
+  'Fallecido',
+];
+
+const trim = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim() : value;
+const trimLower = ({ value }: { value: unknown }) =>
+  typeof value === 'string' ? value.trim().toLowerCase() : value;
 
 class UpdateStatusDto {
-  @IsNotEmpty()
-  @IsIn(['Activo', 'En mentoría', 'Inactivo', 'Baja definitiva', 'Fallecido'])
+  @IsNotEmpty({ message: 'El estatus es requerido.' })
+  @IsIn(ADVISOR_STATUSES, {
+    message: `El estatus debe ser uno de: ${ADVISOR_STATUSES.join(', ')}.`,
+  })
   status: string;
 
-  @IsOptional() @IsString() motivo_baja?: string;
-  @IsOptional() @IsString() fecha_baja?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_LARGO) motivo_baja?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(FECHA_ISO, { message: MSG.fecha })
+  fecha_baja?: string;
 }
 
 class UpdateBankDto {
-  @IsNotEmpty() @IsString() clabe_interbancaria: string;
-  @IsNotEmpty() @IsString() banco: string;
-  @IsNotEmpty() @IsString() titular_cuenta: string;
+  @IsNotEmpty({ message: 'La CLABE es requerida.' })
+  @Matches(CLABE, { message: MSG.clabe })
+  clabe_interbancaria: string;
+
+  @Transform(trim)
+  @IsNotEmpty({ message: 'El banco es requerido.' })
+  @IsString()
+  @MaxLength(MAX_NOMBRE)
+  banco: string;
+
+  @Transform(trim)
+  @IsNotEmpty({ message: 'El titular de la cuenta es requerido.' })
+  @IsString()
+  @MaxLength(MAX_NOMBRE)
+  @Matches(SOLO_LETRAS, { message: MSG.soloLetras })
+  titular_cuenta: string;
 }
 
 class CreateAdvisorDto {
+  @Transform(trim)
   @IsNotEmpty({ message: 'El nombre es requerido.' })
+  @MaxLength(MAX_NOMBRE, {
+    message: `El nombre no puede exceder ${MAX_NOMBRE} caracteres.`,
+  })
+  @Matches(SOLO_LETRAS, { message: MSG.soloLetras })
   name: string;
 
+  @Transform(trimLower)
   @IsEmail({}, { message: 'El correo electrónico debe ser válido.' })
   @IsNotEmpty({ message: 'El correo electrónico es requerido.' })
+  @MaxLength(MAX_EMAIL)
   email: string;
 
-  @IsOptional() @IsString() phone: string;
-  @IsOptional() @IsString() rfc: string;
-  @IsOptional() @IsString() curp: string;
-  @IsOptional() @IsString() fechaNacimiento: string;
-  @IsOptional() @IsString() fechaAltaAsesor: string;
-  @IsOptional() @IsString() specialty: string;
-  @IsOptional() @IsString() license: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(TELEFONO_MX, { message: MSG.telefono })
+  phone?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(RFC, { message: MSG.rfc })
+  rfc?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(CURP, { message: MSG.curp })
+  curp?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(FECHA_ISO, { message: MSG.fecha })
+  fechaNacimiento?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(FECHA_ISO, { message: MSG.fecha })
+  fechaAltaAsesor?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) specialty?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) license?: string;
 
   @IsNotEmpty({ message: 'El estatus es requerido.' })
+  @IsIn(ADVISOR_STATUSES, {
+    message: `El estatus debe ser uno de: ${ADVISOR_STATUSES.join(', ')}.`,
+  })
   status: string;
 
-  @IsOptional() @IsString() inviteByAdvisorId: string;
-  @IsOptional() pasaPorMentoria: boolean;
-  @IsOptional() @IsString() idMentor: string;
-  @IsOptional() @IsString() nombreBeneficiario: string;
-  @IsOptional() @IsString() telefonoBeneficiario: string;
-  @IsOptional() @IsString() correoBeneficiario: string;
-  @IsOptional() @IsString() observaciones: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  inviteByAdvisorId?: string;
+  @IsOptional() @IsBoolean() pasaPorMentoria?: boolean;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) idMentor?: string;
 
   @IsOptional()
-  @IsNumber()
-  metaAma: number;
+  @EmptyToUndefined()
+  @Transform(trim)
+  @MaxLength(MAX_NOMBRE)
+  @Matches(SOLO_LETRAS, { message: MSG.soloLetras })
+  nombreBeneficiario?: string;
+
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(TELEFONO_MX, { message: MSG.telefono })
+  telefonoBeneficiario?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Transform(trimLower)
+  @IsEmail({}, { message: MSG.email })
+  @MaxLength(MAX_EMAIL)
+  correoBeneficiario?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_LARGO) observaciones?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false },
+    { message: 'La meta AMA debe ser un número.' },
+  )
+  @Min(0, { message: 'La meta AMA no puede ser negativa.' })
+  @Max(MAX_MONTO, { message: 'La meta AMA excede el máximo permitido.' })
+  metaAma?: number;
+}
+
+// PATCH /advisors/:id — solo campos editables, ya no acepta `any`
+class UpdateAdvisorDto {
+  @IsOptional()
+  @EmptyToUndefined()
+  @Transform(trim)
+  @MaxLength(MAX_NOMBRE)
+  @Matches(SOLO_LETRAS, { message: MSG.soloLetras })
+  name?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Transform(trimLower)
+  @IsEmail({}, { message: MSG.email })
+  @MaxLength(MAX_EMAIL)
+  email?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(TELEFONO_MX, { message: MSG.telefono })
+  phone?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(RFC, { message: MSG.rfc })
+  rfc?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(CURP, { message: MSG.curp })
+  curp?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) specialty?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) license?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) idMentor?: string;
+  @IsOptional() @IsBoolean() pasaPorMentoria?: boolean;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Transform(trim)
+  @MaxLength(MAX_NOMBRE)
+  @Matches(SOLO_LETRAS, { message: MSG.soloLetras })
+  nombreBeneficiario?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Matches(TELEFONO_MX, { message: MSG.telefono })
+  telefonoBeneficiario?: string;
+  @IsOptional()
+  @EmptyToUndefined()
+  @Transform(trimLower)
+  @IsEmail({}, { message: MSG.email })
+  @MaxLength(MAX_EMAIL)
+  correoBeneficiario?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_LARGO) observaciones?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false },
+    { message: 'La meta AMA debe ser un número.' },
+  )
+  @Min(0)
+  @Max(MAX_MONTO)
+  metaAma?: number;
 }
 
 @Controller('advisors')
@@ -76,7 +254,7 @@ export class AdvisorsController {
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @Patch(':id')
-  async update(@Param('id') id: string, @Body() body: any) {
+  async update(@Param('id') id: string, @Body() body: UpdateAdvisorDto) {
     return this.advisorsService.update(id, body);
   }
 
@@ -87,10 +265,16 @@ export class AdvisorsController {
   }
 
   @Patch(':id/bank')
-  async updateBank(@Param('id') id: string, @Body() body: UpdateBankDto, @Request() req: any) {
+  async updateBank(
+    @Param('id') id: string,
+    @Body() body: UpdateBankDto,
+    @Request() req: any,
+  ) {
     // Asesor solo puede editar sus propios datos bancarios
     if (req.user.role === UserRole.ASESOR && req.user.advisorId !== id) {
-      throw new ForbiddenException('Solo puedes editar tus propios datos bancarios.');
+      throw new ForbiddenException(
+        'Solo puedes editar tus propios datos bancarios.',
+      );
     }
     return this.advisorsService.updateBank(id, body);
   }

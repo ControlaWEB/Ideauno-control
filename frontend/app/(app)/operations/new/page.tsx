@@ -14,11 +14,18 @@ import {
   ShieldAlert, AlertCircle, Upload, X, Calculator,
 } from 'lucide-react';
 import { useHasAccess, AccessDenied } from '@/components/access-guard';
+import { MAX_MONTO, getApiErrorMessage } from '@/lib/validators';
 
 const ALLOWED_ROLES = ['Super Admin', 'Admin', 'Asesor'];
 
 /* ─── Schema ─── */
-const schema = z.object({
+const zMonto = (msgReq: string) =>
+  z.coerce.number({ message: 'Ingresa un monto válido.' })
+    .positive(msgReq)
+    .max(MAX_MONTO, 'El monto excede el máximo permitido.')
+    .refine((v) => Math.round(v * 100) === v * 100, 'Máximo 2 decimales.');
+
+const schemaBase = z.object({
   // S1 Origen
   tipoOperacion:          z.enum(['Venta', 'Renta']),
   propiedadEnInventario:  z.enum(['si', 'no']),
@@ -26,13 +33,21 @@ const schema = z.object({
   tipoCierreExterno:      z.string().optional().or(z.literal('')),
   direccionCierreExterno: z.string().optional().or(z.literal('')),
   tipoInmuebleExterno:    z.string().optional().or(z.literal('')),
-  valorExternoOperacion:  z.coerce.number().optional(),
+  valorExternoOperacion:  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un monto válido.' })
+      .nonnegative('No puede ser negativo.')
+      .max(MAX_MONTO, 'El monto excede el máximo permitido.')
+      .optional(),
+  ),
   docCierreTipo:          z.string().min(1, 'Selecciona el tipo de documento'),
 
   // S2 Económicos
-  precioFinalCierre:      z.coerce.number().min(1, 'Precio requerido'),
-  fechaCierre:            z.string().min(1, 'Fecha requerida'),
-  montoComisionGenerada:  z.coerce.number().min(1, 'Monto de comisión requerido'),
+  precioFinalCierre:      zMonto('El precio debe ser mayor a cero.'),
+  fechaCierre:            z.string().min(1, 'Fecha requerida')
+    .refine((v) => !Number.isNaN(Date.parse(v)), 'Fecha inválida.')
+    .refine((v) => new Date(v + 'T00:00:00') <= new Date(), 'La fecha de cierre no puede ser futura.'),
+  montoComisionGenerada:  zMonto('El monto de comisión debe ser mayor a cero.'),
 
   // S3 Asesores
   closerId:               z.string().min(1, 'Selecciona el asesor cerrador'),
@@ -57,6 +72,22 @@ const schema = z.object({
   solicitaLiberacion: z.enum(['si', 'no']),
   observaciones:      z.string().optional().or(z.literal('')),
 });
+
+const schema = schemaBase
+  // Si la propiedad está en inventario, hay que seleccionarla; si no, describir el cierre externo
+  .refine(
+    (d) => d.propiedadEnInventario === 'no' || (d.propertyId ?? '') !== '',
+    { message: 'Selecciona la propiedad del inventario.', path: ['propertyId'] },
+  )
+  .refine(
+    (d) => d.propiedadEnInventario === 'si' || (d.direccionCierreExterno ?? '').trim() !== '',
+    { message: 'Indica la dirección del cierre externo.', path: ['direccionCierreExterno'] },
+  )
+  // La comisión no puede exceder el precio final del cierre
+  .refine(
+    (d) => !(d.montoComisionGenerada > 0 && d.precioFinalCierre > 0) || d.montoComisionGenerada <= d.precioFinalCierre,
+    { message: 'La comisión no puede ser mayor al precio final del cierre.', path: ['montoComisionGenerada'] },
+  );
 
 type FormData = z.infer<typeof schema>;
 
@@ -256,8 +287,8 @@ export default function NewOperationPage() {
       setComm(res.data?.commBreakdown ?? null);
       setSuccess(true);
       setTimeout(() => router.push('/operations'), 3000);
-    } catch (err: any) {
-      setErrorMsg(err?.response?.data?.message ?? 'Error al registrar el cierre. Intenta de nuevo.');
+    } catch (err: unknown) {
+      setErrorMsg(getApiErrorMessage(err, 'Error al registrar el cierre. Intenta de nuevo.'));
     } finally {
       setUploading(false);
     }
@@ -442,17 +473,18 @@ export default function NewOperationPage() {
                 <label className="input-label">
                   {tipoOp === 'Renta' ? 'Renta mensual final ($)' : 'Precio final de cierre ($)'} *
                 </label>
-                <input {...register('precioFinalCierre')} type="number" className="input" placeholder="0" />
+                <input {...register('precioFinalCierre')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
                 <Err msg={errors.precioFinalCierre?.message} />
               </div>
               <div className="input-group">
                 <label className="input-label">Fecha de cierre *</label>
-                <input {...register('fechaCierre')} type="date" className="input" />
+                <input {...register('fechaCierre')} type="date" className="input"
+                  max={new Date().toISOString().split('T')[0]} />
                 <Err msg={errors.fechaCierre?.message} />
               </div>
               <div className="input-group">
                 <label className="input-label">Monto de comisión generada ($) *</label>
-                <input {...register('montoComisionGenerada')} type="number" className="input" placeholder="0" />
+                <input {...register('montoComisionGenerada')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
                 <Err msg={errors.montoComisionGenerada?.message} />
               </div>
             </div>

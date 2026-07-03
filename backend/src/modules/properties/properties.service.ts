@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 
 @Injectable()
@@ -23,7 +27,9 @@ export class PropertiesService {
     const params: Record<string, any> = { limit, offset };
 
     if (filters.location) {
-      whereClauses.push(`LOWER(address) LIKE @location OR LOWER(city) LIKE @location OR LOWER(state) LIKE @location`);
+      whereClauses.push(
+        `LOWER(address) LIKE @location OR LOWER(city) LIKE @location OR LOWER(state) LIKE @location`,
+      );
       params.location = `%${filters.location.toLowerCase()}%`;
     }
     if (filters.type) {
@@ -47,7 +53,8 @@ export class PropertiesService {
       params.tipoOperacion = filters.tipoOperacion;
     }
 
-    const whereString = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const whereString =
+      whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
     const sql = `SELECT * FROM public.properties
                  ${whereString}
@@ -85,7 +92,9 @@ export class PropertiesService {
 
   async create(dto: Record<string, any>) {
     const id = 'prop-' + Math.random().toString(36).substring(2, 11);
-    const autoStatus = dto.contratoComisionFirmado ? 'En revisión' : 'Incompleta';
+    const autoStatus = dto.contratoComisionFirmado
+      ? 'En revisión'
+      : 'Incompleta';
 
     const sql = `INSERT INTO public.properties (
       id, code, folio, tipo_operacion, tipo_inmueble, type, status,
@@ -190,6 +199,56 @@ export class PropertiesService {
       observaciones: dto.observaciones || '',
     });
 
+    // Campos específicos de renta (formulario /rentals/new): antes se perdían
+    // porque el INSERT principal no los incluye.
+    if (
+      dto.tipo_operacion_principal === 'Renta' ||
+      dto.renta_mensual_solicitada !== undefined
+    ) {
+      await this.databaseService.query(
+        `UPDATE public.properties SET
+           tipo_operacion_principal  = @tipoOpPrincipal,
+           tipo_operacion            = 'Renta',
+           quien_realiza_contrato    = @quienContrata,
+           doc_acredita_propiedad    = @docAcredita,
+           renta_mensual_solicitada  = @rentaMensual,
+           deposito_requerido        = @deposito,
+           plazo_minimo_contrato     = @plazoMinimo,
+           acepta_mascotas           = @aceptaMascotas,
+           acepta_estudiantes        = @aceptaEstudiantes,
+           acepta_empresas           = @aceptaEmpresas,
+           requiere_aval             = @requiereAval,
+           acepta_obligado_solidario = @aceptaObligado,
+           requiere_poliza_juridica  = @requierePoliza,
+           servicios_incluidos       = @servicios,
+           equipamiento_incluido     = @equipamiento,
+           disponible_mostrarse      = @disponible,
+           fecha_disponibilidad      = @fechaDisponibilidad,
+           autoriza_promocion        = @autorizaPromocion
+         WHERE id = @id`,
+        {
+          id,
+          tipoOpPrincipal: dto.tipo_operacion_principal || 'Renta',
+          quienContrata: dto.quien_realiza_contrato || '',
+          docAcredita: dto.doc_acredita_propiedad || '',
+          rentaMensual: dto.renta_mensual_solicitada ?? 0,
+          deposito: dto.deposito_requerido || '',
+          plazoMinimo: dto.plazo_minimo_contrato || '',
+          aceptaMascotas: dto.acepta_mascotas || '',
+          aceptaEstudiantes: dto.acepta_estudiantes || '',
+          aceptaEmpresas: dto.acepta_empresas ? 'true' : 'false',
+          requiereAval: dto.requiere_aval ? 'true' : 'false',
+          aceptaObligado: dto.acepta_obligado_solidario ? 'true' : 'false',
+          requierePoliza: dto.requiere_poliza_juridica ? 'true' : 'false',
+          servicios: dto.servicios_incluidos || '[]',
+          equipamiento: dto.equipamiento_incluido || '[]',
+          disponible: dto.disponible_mostrarse ? 'true' : 'false',
+          fechaDisponibilidad: dto.fecha_disponibilidad || null,
+          autorizaPromocion: dto.autorizacionPromocion ? 'true' : 'false',
+        },
+      );
+    }
+
     // Insert captation record in fact_captaciones
     const captacionId = 'cap-' + Math.random().toString(36).substring(2, 11);
     await this.databaseService.query(
@@ -260,39 +319,125 @@ export class PropertiesService {
     return { id, status: dto.status || autoStatus };
   }
 
+  // Mapa explícito campo→columna: los keys del body NUNCA se interpolan en el SQL.
+  // Nota: superficieTerreno/Construccion mapean a columnas *_m2.
+  private static readonly UPDATABLE_COLUMNS: Record<string, string> = {
+    code: 'code',
+    folio: 'folio',
+    tipoOperacion: 'tipo_operacion',
+    tipoInmueble: 'tipo_inmueble',
+    type: 'type',
+    status: 'status',
+    ownerName: 'owner_name',
+    ownerPhone: 'owner_phone',
+    ownerEmail: 'owner_email',
+    ownerRfc: 'owner_rfc',
+    ownerCurp: 'owner_curp',
+    ownerEstadoCivil: 'owner_estado_civil',
+    adquiridaMatrimonio: 'adquirida_matrimonio',
+    regimenMatrimonial: 'regimen_matrimonial',
+    nombreConyuge: 'nombre_conyuge',
+    conyugeDeAcuerdo: 'conyuge_de_acuerdo',
+    tieneCopropietarios: 'tiene_copropietarios',
+    copropietarios: 'copropietarios',
+    quienRealizaVenta: 'quien_realiza_venta',
+    tienePredial: 'tiene_predial',
+    tieneAgua: 'tiene_agua',
+    tieneLuz: 'tiene_luz',
+    tieneAvaluo: 'tiene_avaluo',
+    tieneHipoteca: 'tiene_hipoteca',
+    institucionAcreedora: 'institucion_acreedora',
+    saldoHipoteca: 'saldo_hipoteca',
+    provieneHerencia: 'proviene_herencia',
+    adjudicacionConcluida: 'adjudicacion_concluida',
+    address: 'address',
+    city: 'city',
+    state: 'state',
+    zona: 'zona',
+    mapsUrl: 'maps_url',
+    superficieTerreno: 'superficie_terreno_m2',
+    superficieConstruccion: 'superficie_construccion_m2',
+    frenteM: 'frente_m',
+    fondoM: 'fondo_m',
+    recamaras: 'recamaras',
+    banosCompletos: 'banos_completos',
+    mediosBanos: 'medios_banos',
+    estacionamientos: 'estacionamientos',
+    niveles: 'niveles',
+    antiguedad: 'antiguedad',
+    estadoConservacion: 'estado_conservacion',
+    situacionActual: 'situacion_actual',
+    price: 'price',
+    currency: 'currency',
+    esNegociable: 'es_negociable',
+    formasPago: 'formas_pago',
+    cuotaMantenimiento: 'cuota_mantenimiento',
+    amenidades: 'amenidades',
+    description: 'description',
+    advisorId: 'advisor_id',
+    fechaCaptacion: 'fecha_captacion',
+    autorizacionPromocion: 'autorizacion_promocion',
+    tipoAutorizacion: 'tipo_autorizacion',
+    contratoComisionFirmado: 'contrato_comision_firmado',
+    fechaFirmaContrato: 'fecha_firma_contrato',
+    vigenciaContrato: 'vigencia_contrato',
+    porcentajeComisionPactado: 'porcentaje_comision_pactado',
+    observaciones: 'observaciones_captacion',
+  };
+
   async update(id: string, dto: Partial<any>) {
     await this.findOne(id);
 
-    const fields = Object.keys(dto);
+    const fields = Object.keys(dto).filter(
+      (f) =>
+        PropertiesService.UPDATABLE_COLUMNS[f] !== undefined &&
+        dto[f] !== undefined,
+    );
     if (fields.length === 0) return this.findOne(id);
 
-    const setClauses = fields.map((field) => {
-      const snakeField = field.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`);
-      return `${snakeField} = @${field}`;
-    });
+    const setClauses = fields.map(
+      (field) => `${PropertiesService.UPDATABLE_COLUMNS[field]} = @${field}`,
+    );
 
     const sql = `UPDATE public.properties SET ${setClauses.join(', ')} WHERE id = @id`;
-    await this.databaseService.query(sql, { id, ...dto });
+    const params: Record<string, any> = { id };
+    for (const f of fields) {
+      // Booleans viajan como texto 'true'/'false' (las funciones exec_sql_* los castean)
+      params[f] =
+        typeof dto[f] === 'boolean' ? (dto[f] ? 'true' : 'false') : dto[f];
+    }
+    await this.databaseService.query(sql, params);
 
     return this.findOne(id);
   }
 
   async updateStatus(id: string, status: string) {
-    const BLOCKED_STATUSES = ['Activa', 'Publicable', 'Compartible'];
+    // 'Compartida' es el valor que envía la UI; 'Compartible' se conserva por compatibilidad
+    const BLOCKED_STATUSES = [
+      'Activa',
+      'Publicable',
+      'Compartible',
+      'Compartida',
+    ];
 
     if (BLOCKED_STATUSES.includes(status)) {
       const prop = await this.findOne(id);
-      if (prop.contrato_comision_firmado !== 'true' && prop.contrato_comision_firmado !== true) {
+      if (
+        prop.contrato_comision_firmado !== 'true' &&
+        prop.contrato_comision_firmado !== true
+      ) {
         throw new BadRequestException(
-          'La propiedad no puede activarse sin contrato de comisión mercantil firmado. Actualiza el contrato antes de cambiar el estatus.'
+          'La propiedad no puede activarse sin contrato de comisión mercantil firmado. Actualiza el contrato antes de cambiar el estatus.',
         );
       }
       if (
-        (prop.proviene_herencia === 'true' || prop.proviene_herencia === true) &&
-        prop.adjudicacion_concluida !== 'true' && prop.adjudicacion_concluida !== true
+        (prop.proviene_herencia === 'true' ||
+          prop.proviene_herencia === true) &&
+        prop.adjudicacion_concluida !== 'true' &&
+        prop.adjudicacion_concluida !== true
       ) {
         throw new BadRequestException(
-          'La propiedad proviene de herencia con adjudicación no concluida. No puede publicarse hasta completar el proceso de adjudicación.'
+          'La propiedad proviene de herencia con adjudicación no concluida. No puede publicarse hasta completar el proceso de adjudicación.',
         );
       }
     }

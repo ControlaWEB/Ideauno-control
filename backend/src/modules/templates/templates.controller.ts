@@ -20,8 +20,38 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 import { TemplatesService } from './templates.service';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import { Transform } from 'class-transformer';
+import { MAX_NOMBRE, MAX_TEXTO_LARGO } from '../../common/validation/patterns';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+const CATEGORIAS = ['KYC', 'PLD', 'Contrato', 'Otro'];
+
+class UploadTemplateDto {
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))
+  @IsNotEmpty({ message: 'El nombre de la plantilla es requerido.' })
+  @IsString()
+  @MaxLength(MAX_NOMBRE)
+  nombre: string;
+
+  @IsNotEmpty({ message: 'La categoría es requerida.' })
+  @IsIn(CATEGORIAS, {
+    message: `La categoría debe ser una de: ${CATEGORIAS.join(', ')}.`,
+  })
+  categoria: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TEXTO_LARGO)
+  descripcion?: string;
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('templates')
@@ -66,15 +96,13 @@ export class TemplatesController {
       }),
     )
     file: Express.Multer.File,
-    @Body('nombre') nombre: string,
-    @Body('categoria') categoria: string,
-    @Body('descripcion') descripcion: string,
+    @Body() body: UploadTemplateDto,
     @Request() req: any,
   ) {
     return this.templatesService.upload(file, {
-      nombre,
-      categoria,
-      descripcion,
+      nombre: body.nombre,
+      categoria: body.categoria,
+      descripcion: body.descripcion ?? '',
       subidoPor: req.user.id,
     });
   }

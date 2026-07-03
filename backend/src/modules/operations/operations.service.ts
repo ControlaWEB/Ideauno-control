@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../notifications/email.service';
@@ -13,7 +17,11 @@ export class OperationsService {
 
   /* ─── Helpers ─── */
 
-  private async notifyAdvisor(advisorId: string, subject: string, bodyHtml: string) {
+  private async notifyAdvisor(
+    advisorId: string,
+    subject: string,
+    bodyHtml: string,
+  ) {
     const [advisor] = await this.databaseService.query<any>(
       `SELECT email FROM public.advisors WHERE id = @id LIMIT 1`,
       { id: advisorId },
@@ -31,8 +39,14 @@ export class OperationsService {
     return rows[0]?.valor_numerico ?? 0;
   }
 
-  private async getOrCreateAma(advisorId: string, fechaAlta: string | null): Promise<{
-    id: string; montoAcumulado: number; ama_alcanzada: boolean; meta_ama: number;
+  private async getOrCreateAma(
+    advisorId: string,
+    fechaAlta: string | null,
+  ): Promise<{
+    id: string;
+    montoAcumulado: number;
+    ama_alcanzada: boolean;
+    meta_ama: number;
   }> {
     const metaAma = await this.getParam('meta_ama');
     const today = new Date().toISOString().split('T')[0];
@@ -42,12 +56,13 @@ export class OperationsService {
       { advisorId },
     );
 
-    if (rows.length > 0) return {
-      id: rows[0].id,
-      montoAcumulado: Number(rows[0].monto_acumulado),
-      ama_alcanzada: rows[0].ama_alcanzada,
-      meta_ama: Number(rows[0].meta_ama),
-    };
+    if (rows.length > 0)
+      return {
+        id: rows[0].id,
+        montoAcumulado: Number(rows[0].monto_acumulado),
+        ama_alcanzada: rows[0].ama_alcanzada,
+        meta_ama: Number(rows[0].meta_ama),
+      };
 
     // Crear periodo nuevo
     const inicio = fechaAlta ?? today;
@@ -58,9 +73,20 @@ export class OperationsService {
     await this.databaseService.query(
       `INSERT INTO public.fact_ama_asesor (id, id_asesor, fecha_inicio_periodo, fecha_fin_periodo, meta_ama, monto_acumulado, avance_pct, ama_alcanzada, estatus_ama)
        VALUES (@id, @advisorId, @inicio, @fin, @meta, 0, 0, false, 'En progreso')`,
-      { id: amaId, advisorId, inicio, fin: fechaFin.toISOString().split('T')[0], meta: metaAma },
+      {
+        id: amaId,
+        advisorId,
+        inicio,
+        fin: fechaFin.toISOString().split('T')[0],
+        meta: metaAma,
+      },
     );
-    return { id: amaId, montoAcumulado: 0, ama_alcanzada: false, meta_ama: metaAma };
+    return {
+      id: amaId,
+      montoAcumulado: 0,
+      ama_alcanzada: false,
+      meta_ama: metaAma,
+    };
   }
 
   /* ─── Motor de comisiones (spec §9) ─── */
@@ -74,13 +100,17 @@ export class OperationsService {
     const { operationId, advisorId, montoComision, tipoOperacion } = params;
 
     // Leer params configurables
-    const [pctInvitacion, pctAsesorNormal, pctMentoria, minExentoMentoriaRenta] =
-      await Promise.all([
-        this.getParam('porcentaje_invitacion'),
-        this.getParam('porcentaje_asesor_normal'),
-        this.getParam('porcentaje_mentoria'),
-        this.getParam('minimo_exento_mentoria_renta'),
-      ]);
+    const [
+      pctInvitacion,
+      pctAsesorNormal,
+      pctMentoria,
+      minExentoMentoriaRenta,
+    ] = await Promise.all([
+      this.getParam('porcentaje_invitacion'),
+      this.getParam('porcentaje_asesor_normal'),
+      this.getParam('porcentaje_mentoria'),
+      this.getParam('minimo_exento_mentoria_renta'),
+    ]);
 
     // Datos del asesor
     const advRows = await this.databaseService.query<any>(
@@ -89,11 +119,13 @@ export class OperationsService {
     );
     const advisor = advRows[0] ?? {};
 
-    const tieneInvitador = advisor.invite_by_advisor_id &&
+    const tieneInvitador =
+      advisor.invite_by_advisor_id &&
       advisor.invite_by_advisor_id !== 'Directo' &&
       advisor.invite_by_advisor_id !== '';
 
-    const pasaMentoria = advisor.pasa_por_mentoria === true ||
+    const pasaMentoria =
+      advisor.pasa_por_mentoria === true ||
       advisor.pasa_por_mentoria === 'true';
 
     // AMA
@@ -108,11 +140,16 @@ export class OperationsService {
     const remanente = parseFloat((montoComision - monto_invitacion).toFixed(2));
 
     const porcentaje_asesor = amaAlcanzada ? 1.0 : pctAsesorNormal;
-    const monto_base_asesor = parseFloat((remanente * porcentaje_asesor).toFixed(2));
-    const monto_inmobiliaria = parseFloat((remanente - monto_base_asesor).toFixed(2));
+    const monto_base_asesor = parseFloat(
+      (remanente * porcentaje_asesor).toFixed(2),
+    );
+    const monto_inmobiliaria = parseFloat(
+      (remanente - monto_base_asesor).toFixed(2),
+    );
 
     // Mentoría: aplica si pasa_por_mentoria y no es renta < umbral
-    const esRentaBajoUmbral = tipoOperacion.toLowerCase().includes('renta') &&
+    const esRentaBajoUmbral =
+      tipoOperacion.toLowerCase().includes('renta') &&
       montoComision < minExentoMentoriaRenta;
     const aplicaMentoria = pasaMentoria && !esRentaBajoUmbral;
 
@@ -120,7 +157,9 @@ export class OperationsService {
       ? parseFloat((monto_base_asesor * pctMentoria).toFixed(2))
       : 0;
 
-    const monto_neto_asesor = parseFloat((monto_base_asesor - monto_mentoria).toFixed(2));
+    const monto_neto_asesor = parseFloat(
+      (monto_base_asesor - monto_mentoria).toFixed(2),
+    );
 
     // Guardar comisión principal
     const commId = 'comm-' + Math.random().toString(36).substring(2, 10);
@@ -139,15 +178,20 @@ export class OperationsService {
         @neto, @inmob, @aplAma, 'Calculada'
       )`,
       {
-        id: commId, opId: operationId, advId: advisorId,
+        id: commId,
+        opId: operationId,
+        advId: advisorId,
         amount: monto_neto_asesor,
         comTotal: montoComision,
-        pctInv: pctInvitacion, mtoInv: monto_invitacion,
+        pctInv: pctInvitacion,
+        mtoInv: monto_invitacion,
         invId: tieneInvitador ? advisor.invite_by_advisor_id : '',
         remanente,
-        pctAdv: porcentaje_asesor, baseAdv: monto_base_asesor,
+        pctAdv: porcentaje_asesor,
+        baseAdv: monto_base_asesor,
         aplMen: aplicaMentoria ? 'true' : 'false',
-        pctMen: pctMentoria, mtoMen: monto_mentoria,
+        pctMen: pctMentoria,
+        mtoMen: monto_mentoria,
         mentorId: advisor.id_mentor || advisor.invite_by_advisor_id || '',
         neto: monto_neto_asesor,
         inmob: monto_inmobiliaria,
@@ -186,9 +230,14 @@ export class OperationsService {
       }
     }
 
-    // Actualizar AMA del asesor
-    const nuevoAcumulado = parseFloat((ama.montoAcumulado + monto_neto_asesor).toFixed(2));
-    const nuevoPct = parseFloat(((nuevoAcumulado / ama.meta_ama) * 100).toFixed(2));
+    // Actualizar AMA del asesor (evitar división entre cero si meta_ama = 0)
+    const nuevoAcumulado = parseFloat(
+      (ama.montoAcumulado + monto_neto_asesor).toFixed(2),
+    );
+    const nuevoPct =
+      ama.meta_ama > 0
+        ? parseFloat(((nuevoAcumulado / ama.meta_ama) * 100).toFixed(2))
+        : 0;
     const nuevoAlcanzada = nuevoAcumulado >= ama.meta_ama;
     let nuevoEstatus = 'En progreso';
     if (nuevoAlcanzada) nuevoEstatus = 'AMA alcanzada';
@@ -208,7 +257,9 @@ export class OperationsService {
         monto: nuevoAcumulado,
         pct: nuevoPct,
         alcanzada: nuevoAlcanzada ? 'true' : 'false',
-        fechaAlc: nuevoAlcanzada ? new Date().toISOString().split('T')[0] : null,
+        fechaAlc: nuevoAlcanzada
+          ? new Date().toISOString().split('T')[0]
+          : null,
         estatus: nuevoEstatus,
       },
     );
@@ -231,16 +282,31 @@ export class OperationsService {
 
   /* ─── CRUD ─── */
 
-  async findAll(filters: { page?: number; limit?: number; status?: string; type?: string; advisorId?: string }) {
+  async findAll(filters: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    type?: string;
+    advisorId?: string;
+  }) {
     const page = filters.page || 1;
     const limit = filters.limit || 10;
     const offset = (page - 1) * limit;
     const clauses: string[] = [];
     const params: Record<string, any> = { limit, offset };
 
-    if (filters.status)    { clauses.push('o.status = @status');       params.status    = filters.status; }
-    if (filters.type)      { clauses.push('o.type = @type');            params.type      = filters.type; }
-    if (filters.advisorId) { clauses.push('o.advisor_id = @advisorId'); params.advisorId = filters.advisorId; }
+    if (filters.status) {
+      clauses.push('o.status = @status');
+      params.status = filters.status;
+    }
+    if (filters.type) {
+      clauses.push('o.type = @type');
+      params.type = filters.type;
+    }
+    if (filters.advisorId) {
+      clauses.push('o.advisor_id = @advisorId');
+      params.advisorId = filters.advisorId;
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
     const sql = `SELECT o.*, p.address as property_address, p.type as property_type,
@@ -260,7 +326,8 @@ export class OperationsService {
       data,
       meta: {
         total: Number(countResult[0]?.total || 0),
-        page, limit,
+        page,
+        limit,
         totalPages: Math.ceil(Number(countResult[0]?.total || 0) / limit),
       },
     };
@@ -268,9 +335,11 @@ export class OperationsService {
 
   async findOne(id: string) {
     const rows = await this.databaseService.query<any>(
-      `SELECT * FROM public.operations WHERE id = @id LIMIT 1`, { id },
+      `SELECT * FROM public.operations WHERE id = @id LIMIT 1`,
+      { id },
     );
-    if (!rows.length) throw new NotFoundException(`Operación ${id} no encontrada.`);
+    if (!rows.length)
+      throw new NotFoundException(`Operación ${id} no encontrada.`);
     return rows[0];
   }
 
@@ -279,9 +348,21 @@ export class OperationsService {
     const year = new Date().getFullYear();
     const code = `OP-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
 
-    const montoComision = parseFloat(dto.montoComisionGenerada ?? dto.totalCommission ?? 0);
+    const montoComisionRaw = parseFloat(
+      dto.montoComisionGenerada ?? dto.totalCommission ?? 0,
+    );
+    const montoComision = Number.isFinite(montoComisionRaw)
+      ? montoComisionRaw
+      : 0;
+    if (montoComision < 0) {
+      throw new BadRequestException(
+        'El monto de comisión no puede ser negativo.',
+      );
+    }
     const tipoOp = dto.tipoOperacion ?? dto.type ?? 'Venta';
-    const statusInicial = dto.pldExpedienteCompleto ? 'En revisión' : 'Solicitado';
+    const statusInicial = dto.pldExpedienteCompleto
+      ? 'En revisión'
+      : 'Solicitado';
 
     const sql = `INSERT INTO public.operations (
       id, code, property_id, client_id, advisor_id, type, status,
@@ -302,7 +383,8 @@ export class OperationsService {
     )`;
 
     await this.databaseService.query(sql, {
-      id, code,
+      id,
+      code,
       propertyId: dto.propertyId || dto.property_id || null,
       clientId: dto.clientId || dto.client_id || null,
       advisorId: dto.advisorId || dto.advisor_id || dto.closerId || '',
@@ -344,7 +426,9 @@ export class OperationsService {
     // Marcar propiedad como vendida/rentada si está en inventario
     if (dto.propiedadEnInventario && (dto.propertyId || dto.property_id)) {
       const propId = dto.propertyId || dto.property_id;
-      const nuevoEstatus = tipoOp.toLowerCase().includes('renta') ? 'rentada' : 'vendida';
+      const nuevoEstatus = tipoOp.toLowerCase().includes('renta')
+        ? 'rentada'
+        : 'vendida';
       await this.databaseService.query(
         `UPDATE public.properties SET status = @status WHERE id = @id`,
         { status: nuevoEstatus, id: propId },
@@ -361,34 +445,60 @@ export class OperationsService {
     return { id, code, status: statusInicial, commBreakdown };
   }
 
-  async findAllCommissions(filters: { advisorId?: string; status?: string; type?: string; page?: number; limit?: number }) {
+  async findAllCommissions(filters: {
+    advisorId?: string;
+    status?: string;
+    type?: string;
+    page?: number;
+    limit?: number;
+  }) {
     const page = filters.page || 1;
     const limit = filters.limit || 20;
     const offset = (page - 1) * limit;
     const clauses: string[] = [];
     const params: Record<string, any> = { limit, offset };
 
-    if (filters.advisorId) { clauses.push('c.advisor_id = @advId'); params.advId = filters.advisorId; }
-    if (filters.status)    { clauses.push('c.estatus_comision = @status'); params.status = filters.status; }
-    if (filters.type)      { clauses.push('c.type = @type'); params.type = filters.type; }
+    if (filters.advisorId) {
+      clauses.push('c.advisor_id = @advId');
+      params.advId = filters.advisorId;
+    }
+    if (filters.status) {
+      clauses.push('c.estatus_comision = @status');
+      params.status = filters.status;
+    }
+    if (filters.type) {
+      clauses.push('c.type = @type');
+      params.type = filters.type;
+    }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 
-    const rows = await this.databaseService.query<any>(`
+    const rows = await this.databaseService.query<any>(
+      `
       SELECT c.*, a.name as advisor_name, o.code as operation_code, o.type as operation_type
       FROM public.commissions c
       LEFT JOIN public.advisors a ON c.advisor_id = a.id
       LEFT JOIN public.operations o ON c.operation_id = o.id
       ${where}
       ORDER BY c.created_at DESC LIMIT @limit OFFSET @offset
-    `, params);
+    `,
+      params,
+    );
 
-    const total = await this.databaseService.query<any>(`
+    const total = await this.databaseService.query<any>(
+      `
       SELECT COUNT(*) as t FROM public.commissions c ${where}
-    `, params);
+    `,
+      params,
+    );
 
     return {
       data: rows,
-      meta: { total: Number(total[0]?.t || 0), page, limit, totalPages: Math.ceil(Number(total[0]?.t || 0) / limit) },
+      meta: {
+        total: Number(total[0]?.t || 0),
+        page,
+        limit,
+        totalPages: Math.ceil(Number(total[0]?.t || 0) / limit),
+      },
     };
   }
 
@@ -397,11 +507,14 @@ export class OperationsService {
       `SELECT id, operation_id, advisor_id, estatus_comision FROM public.commissions WHERE id = @id LIMIT 1`,
       { id: commissionId },
     );
-    if (!rows.length) throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
+    if (!rows.length)
+      throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
     const comm = rows[0];
 
     if (comm.estatus_comision === 'Bloqueada') {
-      throw new BadRequestException('Comisión bloqueada. Desbloquear antes de liberar.');
+      throw new BadRequestException(
+        'Comisión bloqueada. Desbloquear antes de liberar.',
+      );
     }
     if (comm.estatus_comision === 'Liberada') {
       throw new BadRequestException('Comisión ya está Liberada.');
@@ -412,10 +525,17 @@ export class OperationsService {
       { id: comm.operation_id },
     );
     if (!opRows?.validado_por_admin) {
-      throw new BadRequestException('La operación aún no ha sido validada por administración.');
+      throw new BadRequestException(
+        'La operación aún no ha sido validada por administración.',
+      );
     }
-    if (!opRows.pld_expediente_completo || opRows.pld_expediente_completo === 'false') {
-      throw new BadRequestException('Expediente PLD incompleto. No se puede liberar.');
+    if (
+      !opRows.pld_expediente_completo ||
+      opRows.pld_expediente_completo === 'false'
+    ) {
+      throw new BadRequestException(
+        'Expediente PLD incompleto. No se puede liberar.',
+      );
     }
 
     await this.databaseService.query(
@@ -441,10 +561,13 @@ export class OperationsService {
       `SELECT id, advisor_id, estatus_comision FROM public.commissions WHERE id = @id LIMIT 1`,
       { id: commissionId },
     );
-    if (!rows.length) throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
+    if (!rows.length)
+      throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
 
     if (['Pagada', 'Cancelada'].includes(rows[0].estatus_comision)) {
-      throw new BadRequestException(`No se puede bloquear comisión en estatus: ${rows[0].estatus_comision}`);
+      throw new BadRequestException(
+        `No se puede bloquear comisión en estatus: ${rows[0].estatus_comision}`,
+      );
     }
 
     await this.databaseService.query(
@@ -470,9 +593,12 @@ export class OperationsService {
       `SELECT id, advisor_id, estatus_comision FROM public.commissions WHERE id = @id LIMIT 1`,
       { id: commissionId },
     );
-    if (!rows.length) throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
+    if (!rows.length)
+      throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
     if (rows[0].estatus_comision !== 'Bloqueada') {
-      throw new BadRequestException('Solo se pueden desbloquear comisiones en estatus Bloqueada.');
+      throw new BadRequestException(
+        'Solo se pueden desbloquear comisiones en estatus Bloqueada.',
+      );
     }
 
     await this.databaseService.query(
@@ -498,7 +624,9 @@ export class OperationsService {
 
     const blockedStatuses = ['Cancelado', 'Pagado'];
     if (blockedStatuses.includes(op.status)) {
-      throw new BadRequestException(`Operación no puede cancelarse en estatus: ${op.status}`);
+      throw new BadRequestException(
+        `Operación no puede cancelarse en estatus: ${op.status}`,
+      );
     }
 
     const paidCommissions = await this.databaseService.query<any>(
@@ -566,12 +694,15 @@ export class OperationsService {
       const op = await this.findOne(id);
       if (!op.validado_por_admin) {
         throw new BadRequestException(
-          'La operación debe ser validada por administración antes de liberar la comisión.'
+          'La operación debe ser validada por administración antes de liberar la comisión.',
         );
       }
-      if (op.pld_expediente_completo !== 'true' && op.pld_expediente_completo !== true) {
+      if (
+        op.pld_expediente_completo !== 'true' &&
+        op.pld_expediente_completo !== true
+      ) {
         throw new BadRequestException(
-          'El expediente PLD debe estar completo antes de liberar la comisión.'
+          'El expediente PLD debe estar completo antes de liberar la comisión.',
         );
       }
       await this.databaseService.query(
@@ -581,7 +712,8 @@ export class OperationsService {
     }
 
     await this.databaseService.query(
-      `UPDATE public.operations SET status = @status WHERE id = @id`, { id, status },
+      `UPDATE public.operations SET status = @status WHERE id = @id`,
+      { id, status },
     );
     if (status === 'Validado por administración') {
       await this.databaseService.query(

@@ -13,21 +13,47 @@ import {
   Camera, Shield, Upload, X, AlertCircle, Home,
 } from 'lucide-react';
 import { useHasAccess, AccessDenied } from '@/components/access-guard';
+import {
+  zNombre, zNombreOpcional, zEmailOpcional, zTelefono, zRfcOpcional, zCurpOpcional,
+  zFechaNoFutura, MAX_TEXTO_LARGO, MAX_MONTO, MAX_SUPERFICIE,
+  soloDigitos, getApiErrorMessage,
+} from '@/lib/validators';
+
+/* ─── Piezas numéricas ─── */
+// Coerción segura: vacío → undefined, rechaza NaN/negativos y aplica tope
+const zNumOpcional = (max: number, msg = 'Ingresa un número válido.') =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: msg })
+      .nonnegative('No puede ser negativo.')
+      .max(max, 'Excede el máximo permitido.')
+      .optional(),
+  );
+
+const zEnteroOpcional = (max: number) =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un número entero.' })
+      .int('Debe ser un número entero.')
+      .nonnegative('No puede ser negativo.')
+      .max(max, 'Excede el máximo permitido.')
+      .optional(),
+  );
 
 /* ─── Schema ─── */
 const schema = z.object({
   // S1 Propietario
-  ownerName:        z.string().min(2, 'Nombre del propietario requerido'),
-  ownerPhone:       z.string().min(10, 'Teléfono requerido'),
-  ownerEmail:       z.string().optional().or(z.literal('')),
-  ownerRfc:         z.string().optional().or(z.literal('')),
-  ownerCurp:        z.string().optional().or(z.literal('')),
+  ownerName:        zNombre,
+  ownerPhone:       zTelefono,
+  ownerEmail:       zEmailOpcional,
+  ownerRfc:         zRfcOpcional,
+  ownerCurp:        zCurpOpcional,
   ownerEstadoCivil: z.string().min(1, 'Estado civil requerido'),
 
   // S2 Condiciones legales
   adquiridaMatrimonio:  z.enum(['si', 'no', 'desconoce']),
   regimenMatrimonial:   z.string().optional().or(z.literal('')),
-  nombreConyuge:        z.string().optional().or(z.literal('')),
+  nombreConyuge:        zNombreOpcional,
   conyugeDeAcuerdo:     z.string().optional().or(z.literal('')),
   tieneCopropietarios:  z.enum(['si', 'no']),
   quienRealizaVenta:    z.string().min(1, 'Campo requerido'),
@@ -39,46 +65,68 @@ const schema = z.object({
   tieneAvaluo:   z.enum(['si', 'no']),
   tieneHipoteca: z.enum(['si', 'no', 'desconoce']),
   institucionAcreedora: z.string().optional().or(z.literal('')),
-  saldoHipoteca:        z.coerce.number().optional(),
+  saldoHipoteca:        zNumOpcional(MAX_MONTO, 'Ingresa un saldo válido.'),
   provieneHerencia:     z.enum(['si', 'no']),
   adjudicacionConcluida: z.enum(['si', 'no']).optional(),
 
   // S4 Datos del inmueble
   tipoInmueble:           z.string().min(1, 'Tipo de inmueble requerido'),
-  address:                z.string().min(5, 'Dirección requerida'),
-  city:                   z.string().min(2, 'Ciudad requerida'),
-  state:                  z.string().min(2, 'Estado requerido'),
+  address:                z.string().trim().min(5, 'Dirección requerida'),
+  city:                   zNombre,
+  state:                  zNombre,
   zona:                   z.string().optional().or(z.literal('')),
-  mapsUrl:                z.string().optional().or(z.literal('')),
-  superficieTerreno:      z.coerce.number().optional(),
-  superficieConstruccion: z.coerce.number().optional(),
-  frenteM:                z.coerce.number().optional(),
-  fondoM:                 z.coerce.number().optional(),
-  recamaras:              z.coerce.number().optional(),
-  banosCompletos:         z.coerce.number().optional(),
-  mediosBanos:            z.coerce.number().optional(),
-  estacionamientos:       z.coerce.number().optional(),
-  niveles:                z.coerce.number().optional(),
+  mapsUrl:                z.string().trim().max(500).refine(
+    (v) => v === '' || /^https?:\/\/\S+$/i.test(v),
+    'Ingresa una URL válida (http/https).',
+  ).optional().or(z.literal('')),
+  superficieTerreno:      zNumOpcional(MAX_SUPERFICIE, 'Superficie inválida.'),
+  superficieConstruccion: zNumOpcional(MAX_SUPERFICIE, 'Superficie inválida.'),
+  frenteM:                zNumOpcional(10000, 'Medida inválida.'),
+  fondoM:                 zNumOpcional(10000, 'Medida inválida.'),
+  recamaras:              zEnteroOpcional(100),
+  banosCompletos:         zEnteroOpcional(100),
+  mediosBanos:            zEnteroOpcional(100),
+  estacionamientos:       zEnteroOpcional(1000),
+  niveles:                zEnteroOpcional(200),
   antiguedad:             z.string().optional().or(z.literal('')),
   estadoConservacion:     z.string().min(1, 'Estado de conservación requerido'),
   situacionActual:        z.string().min(1, 'Situación actual requerida'),
 
   // S5 Comercial
-  price:              z.coerce.number().min(1, 'Precio requerido'),
+  price: z.coerce.number({ message: 'Ingresa un precio válido.' })
+    .positive('El precio debe ser mayor a cero.')
+    .max(MAX_MONTO, 'El precio excede el máximo permitido.')
+    .refine((v) => Number.isFinite(v) && Math.round(v * 100) === v * 100, 'Máximo 2 decimales.'),
   esNegociable:       z.enum(['si', 'no']),
   formasPago:         z.array(z.string()).min(1, 'Selecciona al menos una forma de pago'),
-  cuotaMantenimiento: z.coerce.number().optional(),
+  cuotaMantenimiento: zNumOpcional(MAX_MONTO, 'Ingresa una cuota válida.'),
   amenidades:         z.string().optional().or(z.literal('')),
 
   // S7 Captación/autorización
   autorizacionPromocion:     z.enum(['si', 'no']),
   tipoAutorizacion:          z.string().optional().or(z.literal('')),
   contratoComisionFirmado:   z.enum(['si', 'no']),
-  fechaFirmaContrato:        z.string().optional().or(z.literal('')),
+  fechaFirmaContrato:        zFechaNoFutura,
   vigenciaContrato:          z.string().optional().or(z.literal('')),
-  porcentajeComisionPactado: z.coerce.number().optional(),
-  observaciones:             z.string().optional().or(z.literal('')),
-});
+  porcentajeComisionPactado: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un porcentaje válido.' })
+      .nonnegative('No puede ser negativo.')
+      .max(100, 'El porcentaje no puede ser mayor a 100.')
+      .optional(),
+  ),
+  observaciones: z.string().trim().max(MAX_TEXTO_LARGO, `Máximo ${MAX_TEXTO_LARGO} caracteres.`).optional().or(z.literal('')),
+})
+  // Si proviene de herencia, hay que indicar si la adjudicación concluyó
+  .refine(
+    (d) => d.provieneHerencia === 'no' || d.adjudicacionConcluida !== undefined,
+    { message: 'Indica si la adjudicación está concluida.', path: ['adjudicacionConcluida'] },
+  )
+  // Si tiene hipoteca, la institución acreedora es requerida
+  .refine(
+    (d) => d.tieneHipoteca !== 'si' || (d.institucionAcreedora ?? '') !== '',
+    { message: 'Indica la institución acreedora.', path: ['institucionAcreedora'] },
+  );
 
 type FormData = z.infer<typeof schema>;
 
@@ -254,8 +302,8 @@ export default function NewPropertyPage() {
 
       setSuccess(true);
       setTimeout(() => router.push('/properties'), 2500);
-    } catch (err: any) {
-      setErrorMsg(err?.response?.data?.message ?? 'Error al guardar la propiedad. Intenta de nuevo.');
+    } catch (err: unknown) {
+      setErrorMsg(getApiErrorMessage(err, 'Error al guardar la propiedad. Intenta de nuevo.'));
     } finally {
       setUploading(false);
     }
@@ -323,7 +371,9 @@ export default function NewPropertyPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
               <div className="input-group">
                 <label className="input-label">Teléfono *</label>
-                <input {...register('ownerPhone')} className="input" placeholder="5512345678" />
+                <input {...register('ownerPhone')} className="input" placeholder="5512345678"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
                 <FieldError msg={errors.ownerPhone?.message} />
               </div>
               <div className="input-group">
@@ -501,7 +551,7 @@ export default function NewPropertyPage() {
                 </div>
                 <div className="input-group">
                   <label className="input-label">Saldo aproximado pendiente ($)</label>
-                  <input {...register('saldoHipoteca')} type="number" className="input" placeholder="0" />
+                  <input {...register('saldoHipoteca')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
                 </div>
               </div>
             )}
@@ -590,7 +640,8 @@ export default function NewPropertyPage() {
               ].map(f => (
                 <div key={f.name} className="input-group">
                   <label className="input-label">{f.label}</label>
-                  <input {...register(f.name as any)} type="number" className="input" placeholder="0" />
+                  <input {...register(f.name as any)} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
+                  <FieldError msg={(errors as any)[f.name]?.message} />
                 </div>
               ))}
             </div>
@@ -606,7 +657,8 @@ export default function NewPropertyPage() {
               ].map(f => (
                 <div key={f.name} className="input-group">
                   <label className="input-label">{f.label}</label>
-                  <input {...register(f.name as any)} type="number" className="input" placeholder="0" />
+                  <input {...register(f.name as any)} type="number" min={0} step={1} inputMode="numeric" className="input" placeholder="0" />
+                  <FieldError msg={(errors as any)[f.name]?.message} />
                 </div>
               ))}
             </div>
@@ -642,7 +694,7 @@ export default function NewPropertyPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div className="input-group">
                 <label className="input-label">Precio solicitado (MXN) *</label>
-                <input {...register('price')} type="number" className="input" placeholder="0" />
+                <input {...register('price')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
                 <FieldError msg={errors.price?.message} />
               </div>
               <div className="input-group">
@@ -683,7 +735,7 @@ export default function NewPropertyPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
               <div className="input-group">
                 <label className="input-label">Cuota de mantenimiento mensual ($)</label>
-                <input {...register('cuotaMantenimiento')} type="number" className="input" placeholder="0" />
+                <input {...register('cuotaMantenimiento')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
               </div>
             </div>
 
@@ -765,7 +817,7 @@ export default function NewPropertyPage() {
                   </div>
                   <div className="input-group">
                     <label className="input-label">% Comisión pactada</label>
-                    <input {...register('porcentajeComisionPactado')} type="number" step="0.5" className="input" placeholder="Ej: 5" />
+                    <input {...register('porcentajeComisionPactado')} type="number" min={0} max={100} step="0.5" inputMode="decimal" className="input" placeholder="Ej: 5" />
                   </div>
                 </div>
                 <div>

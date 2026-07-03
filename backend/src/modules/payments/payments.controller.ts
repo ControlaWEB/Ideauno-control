@@ -1,7 +1,33 @@
 import {
-  Controller, Get, Post, Patch, Param, Body, Query, UseGuards, Request,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  Query,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
-import { IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Max,
+  Min,
+} from 'class-validator';
+import { Type } from 'class-transformer';
+import { ForbiddenException } from '@nestjs/common';
+import { PaginationQueryDto } from '../../common/dto/pagination.dto';
+import {
+  MAX_MONTO,
+  MAX_TEXTO_CORTO,
+  MAX_TEXTO_LARGO,
+} from '../../common/validation/patterns';
 import { PaymentsService } from './payments.service';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -9,20 +35,48 @@ import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 
 class RequestPaymentDto {
-  @IsNotEmpty() @IsString() commissionId: string;
-  @IsNotEmpty() @IsString() advisorId: string;
+  @IsNotEmpty({ message: 'El ID de la comisión es requerido.' })
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  commissionId: string;
+
+  @IsNotEmpty({ message: 'El ID del asesor es requerido.' })
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  advisorId: string;
 }
 
 class MarkPaidDto {
-  @IsNotEmpty() @IsString() formaPago: string;
-  @IsNotEmpty() @IsNumber() montoPagado: number;
-  @IsOptional() requiereCfdi?: boolean;
-  @IsOptional() @IsString() uuidCfdi?: string;
-  @IsOptional() @IsString() referenciaTransferencia?: string;
+  @IsNotEmpty({ message: 'La forma de pago es requerida.' })
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  formaPago: string;
+
+  @IsNotEmpty({ message: 'El monto pagado es requerido.' })
+  @Type(() => Number)
+  @IsNumber(
+    { allowNaN: false, allowInfinity: false },
+    { message: 'El monto pagado debe ser un número válido.' },
+  )
+  @Min(0.01, { message: 'El monto pagado debe ser mayor a cero.' })
+  @Max(MAX_MONTO, { message: 'El monto pagado excede el máximo permitido.' })
+  montoPagado: number;
+
+  @IsOptional() @IsBoolean() requiereCfdi?: boolean;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) uuidCfdi?: string;
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  referenciaTransferencia?: string;
 }
 
 class RejectDto {
-  @IsOptional() @IsString() observaciones?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_LARGO) observaciones?: string;
+}
+
+class FindPaymentsQueryDto extends PaginationQueryDto {
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) advisorId?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) status?: string;
 }
 
 @Controller('payments')
@@ -31,25 +85,33 @@ export class PaymentsController {
   constructor(private paymentsService: PaymentsService) {}
 
   @Post('request')
-  requestPayment(@Body() body: RequestPaymentDto) {
-    return this.paymentsService.requestPayment(body.commissionId, body.advisorId);
+  requestPayment(@Body() body: RequestPaymentDto, @Request() req: any) {
+    // Un Asesor solo puede solicitar el pago de sus propias comisiones
+    if (
+      req.user.role === UserRole.ASESOR &&
+      req.user.advisorId !== body.advisorId
+    ) {
+      throw new ForbiddenException(
+        'Solo puedes solicitar el pago de tus propias comisiones.',
+      );
+    }
+    return this.paymentsService.requestPayment(
+      body.commissionId,
+      body.advisorId,
+    );
   }
 
   @Get()
-  findAll(
-    @Request() req: any,
-    @Query('advisorId') advisorId?: string,
-    @Query('status') status?: string,
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  findAll(@Request() req: any, @Query() query: FindPaymentsQueryDto) {
     const effectiveAdvisorId =
-      req.user.role === UserRole.ASESOR ? (req.user.advisorId ?? req.user.id) : advisorId;
+      req.user.role === UserRole.ASESOR
+        ? (req.user.advisorId ?? req.user.id)
+        : query.advisorId;
     return this.paymentsService.findAll({
       advisorId: effectiveAdvisorId,
-      status,
-      page: page ? +page : 1,
-      limit: limit ? +limit : 10,
+      status: query.status,
+      page: query.page ?? 1,
+      limit: query.limit ?? 10,
     });
   }
 
@@ -71,11 +133,17 @@ export class PaymentsController {
     @Request() req: any,
     @Body() body: MarkPaidDto,
   ) {
-    return this.paymentsService.markPaid(id, req.user.id, body.formaPago, body.montoPagado, {
-      requiereCfdi: body.requiereCfdi,
-      uuidCfdi: body.uuidCfdi,
-      referenciaTransferencia: body.referenciaTransferencia,
-    });
+    return this.paymentsService.markPaid(
+      id,
+      req.user.id,
+      body.formaPago,
+      body.montoPagado,
+      {
+        requiereCfdi: body.requiereCfdi,
+        uuidCfdi: body.uuidCfdi,
+        referenciaTransferencia: body.referenciaTransferencia,
+      },
+    );
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)

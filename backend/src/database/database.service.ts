@@ -30,7 +30,10 @@ export class DatabaseService implements OnModuleInit {
     return this.supabase.storage;
   }
 
-  async query<T = any>(text: string, params?: Record<string, any>): Promise<T[]> {
+  async query<T = any>(
+    text: string,
+    params?: Record<string, any>,
+  ): Promise<T[]> {
     let processedText = text;
     const values: (string | null)[] = [];
 
@@ -40,7 +43,9 @@ export class DatabaseService implements OnModuleInit {
         const regex = new RegExp(`@${key}\\b`, 'g');
         if (processedText.match(regex)) {
           processedText = processedText.replace(regex, `$${index}`);
-          values.push(value === null || value === undefined ? null : String(value));
+          values.push(
+            value === null || value === undefined ? null : String(value),
+          );
           index++;
         }
       }
@@ -65,7 +70,14 @@ export class DatabaseService implements OnModuleInit {
         return [] as T[];
       }
     } catch (err) {
-      console.error('Database query error:', err, '\nQuery:', processedText, '\nValues:', values);
+      console.error(
+        'Database query error:',
+        err,
+        '\nQuery:',
+        processedText,
+        '\nValues:',
+        values,
+      );
       throw err;
     }
   }

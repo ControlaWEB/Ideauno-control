@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import sharp from 'sharp';
 import { DatabaseService } from '../../database/database.service';
 import { UserRole } from '../../common/enums/role.enum';
@@ -10,14 +14,14 @@ const JPEG_QUALITY = 82;
 const BUCKET = process.env.STORAGE_BUCKET ?? 'inmobiliaria-docs';
 const SIGNED_URL_TTL = 3600;
 
-const ADMIN_ROLES: string[] = [
-  UserRole.SUPER_ADMIN,
-  UserRole.ADMIN,
-];
+const ADMIN_ROLES: string[] = [UserRole.SUPER_ADMIN, UserRole.ADMIN];
 
 @Injectable()
 export class DocumentsService {
-  constructor(private db: DatabaseService, private emailService: EmailService) {}
+  constructor(
+    private db: DatabaseService,
+    private emailService: EmailService,
+  ) {}
 
   async upload(
     file: Express.Multer.File,
@@ -40,7 +44,9 @@ export class DocumentsService {
     }
 
     const ext =
-      mimeType === 'image/jpeg' ? 'jpg' : (file.originalname.split('.').pop() ?? 'bin');
+      mimeType === 'image/jpeg'
+        ? 'jpg'
+        : (file.originalname.split('.').pop() ?? 'bin');
 
     const storagePath = `${meta.entidad}/${meta.idEntidad}/${meta.tipoDocumento}/${Date.now()}.${ext}`;
 
@@ -75,15 +81,24 @@ export class DocumentsService {
     return { id, storagePath: data.path, signedUrl };
   }
 
-  async getDocumentUrl(docId: string, requestingUserId: string, requestingRole: string) {
+  async getDocumentUrl(
+    docId: string,
+    requestingUserId: string,
+    requestingRole: string,
+  ) {
     const [doc] = await this.db.query<any>(
       `SELECT * FROM public.dim_documentos WHERE id = @id LIMIT 1`,
       { id: docId },
     );
     if (!doc) throw new NotFoundException(`Documento ${docId} no encontrado.`);
 
-    if (!ADMIN_ROLES.includes(requestingRole) && doc.subido_por !== requestingUserId) {
-      throw new ForbiddenException('Sin permiso para acceder a este documento.');
+    if (
+      !ADMIN_ROLES.includes(requestingRole) &&
+      doc.subido_por !== requestingUserId
+    ) {
+      throw new ForbiddenException(
+        'Sin permiso para acceder a este documento.',
+      );
     }
 
     const signedUrl = await this.buildSignedUrl(doc.storage_path);
@@ -146,7 +161,9 @@ export class DocumentsService {
     if (!doc) throw new NotFoundException(`Documento ${docId} no encontrado.`);
 
     await this.db.storageClient.from(BUCKET).remove([doc.storage_path]);
-    await this.db.query(`DELETE FROM public.dim_documentos WHERE id = @id`, { id: docId });
+    await this.db.query(`DELETE FROM public.dim_documentos WHERE id = @id`, {
+      id: docId,
+    });
     return { deleted: true };
   }
 

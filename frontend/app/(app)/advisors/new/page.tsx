@@ -13,27 +13,45 @@ import {
   Upload, X, AlertCircle,
 } from 'lucide-react';
 import { useHasAccess, AccessDenied } from '@/components/access-guard';
+import {
+  zNombre, zEmail, zEmailOpcional, zTelefono, zTelefonoOpcional,
+  zRfcOpcional, zCurpOpcional, zFechaNoFutura, MAX_TEXTO_LARGO,
+  soloDigitos, getApiErrorMessage,
+} from '@/lib/validators';
 
 const ALLOWED_ROLES = ['Super Admin', 'Admin'];
 
 const schema = z.object({
-  name:             z.string().min(2, 'Nombre requerido (mín 2 caracteres)'),
-  phone:            z.string().min(10, 'Teléfono requerido (mín 10 dígitos)'),
-  email:            z.string().email('Correo electrónico inválido'),
-  rfc:              z.string().max(13).optional().or(z.literal('')),
-  curp:             z.string().optional().or(z.literal('')),
-  fechaNacimiento:  z.string().optional().or(z.literal('')),
+  name:             zNombre,
+  phone:            zTelefono,
+  email:            zEmail,
+  rfc:              zRfcOpcional,
+  curp:             zCurpOpcional,
+  fechaNacimiento:  zFechaNoFutura,
   fechaAltaAsesor:  z.string().min(1, 'Fecha de alta requerida'),
   tieneInvitador:   z.enum(['si', 'no']),
   inviteByAdvisorId: z.string().optional().or(z.literal('')),
   pasaPorMentoria:  z.enum(['si', 'no']),
   idMentor:         z.string().optional().or(z.literal('')),
-  nombreBeneficiario:   z.string().min(2, 'Nombre del beneficiario requerido'),
-  telefonoBeneficiario: z.string().optional().or(z.literal('')),
-  correoBeneficiario:   z.string().optional().or(z.literal('')),
+  nombreBeneficiario:   zNombre,
+  telefonoBeneficiario: zTelefonoOpcional,
+  correoBeneficiario:   zEmailOpcional,
   status:       z.enum(['Activo', 'En mentoría', 'Inactivo', 'Baja definitiva']),
-  observaciones: z.string().optional().or(z.literal('')),
-});
+  observaciones: z.string().trim().max(MAX_TEXTO_LARGO, `Máximo ${MAX_TEXTO_LARGO} caracteres.`).optional().or(z.literal('')),
+})
+  // Coherencia de fechas: el alta no puede ser anterior al nacimiento
+  .refine(
+    (d) => !d.fechaNacimiento || !d.fechaAltaAsesor || d.fechaAltaAsesor > d.fechaNacimiento,
+    { message: 'La fecha de alta no puede ser anterior a la fecha de nacimiento.', path: ['fechaAltaAsesor'] },
+  )
+  .refine(
+    (d) => d.tieneInvitador === 'no' || (d.inviteByAdvisorId ?? '') !== '',
+    { message: 'Selecciona el asesor que lo invitó.', path: ['inviteByAdvisorId'] },
+  )
+  .refine(
+    (d) => d.pasaPorMentoria === 'no' || (d.idMentor ?? '') !== '',
+    { message: 'Selecciona el mentor asignado.', path: ['idMentor'] },
+  );
 
 type FormData = z.infer<typeof schema>;
 
@@ -93,6 +111,7 @@ export default function NewAdvisorPage() {
   const hasAccess = useHasAccess(ALLOWED_ROLES);
   const [success, setSuccess]         = useState(false);
   const [createdEmail, setCreatedEmail] = useState('');
+  const [tempPassword, setTempPassword] = useState('');
   const [errorMsg, setErrorMsg]       = useState<string | null>(null);
   const [uploading, setUploading]     = useState(false);
   const [files, setFiles]             = useState<Partial<Record<FileKey, File>>>({});
@@ -164,10 +183,11 @@ export default function NewAdvisorPage() {
       }
 
       setCreatedEmail(data.email);
+      setTempPassword(res.data?.tempPassword ?? '');
       setSuccess(true);
       setTimeout(() => router.push('/advisors'), 8000);
-    } catch (err: any) {
-      setErrorMsg(err?.response?.data?.message ?? 'Error al registrar asesor. Intenta de nuevo.');
+    } catch (err: unknown) {
+      setErrorMsg(getApiErrorMessage(err, 'Error al registrar asesor. Intenta de nuevo.'));
     } finally {
       setUploading(false);
     }
@@ -197,7 +217,7 @@ export default function NewAdvisorPage() {
               </div>
               <div style={{ fontSize: 13, marginTop: 4 }}>
                 <span style={{ color: 'var(--color-on-surface-variant)' }}>Contraseña temporal: </span>
-                <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>Idea2024!</strong>
+                <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{tempPassword || '(enviada por correo)'}</strong>
               </div>
               <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 8 }}>
                 El asesor deberá cambiar su contraseña al primer inicio de sesión.
@@ -265,7 +285,9 @@ export default function NewAdvisorPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
               <div className="input-group">
                 <label className="input-label">Teléfono / WhatsApp *</label>
-                <input {...register('phone')} className="input" placeholder="5512345678" />
+                <input {...register('phone')} className="input" placeholder="5512345678"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
                 <FieldError msg={errors.phone?.message} />
               </div>
               <div className="input-group">
@@ -293,7 +315,9 @@ export default function NewAdvisorPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
               <div className="input-group">
                 <label className="input-label">Fecha de nacimiento</label>
-                <input {...register('fechaNacimiento')} type="date" className="input" />
+                <input {...register('fechaNacimiento')} type="date" className="input"
+                  max={new Date().toISOString().split('T')[0]} />
+                <FieldError msg={errors.fechaNacimiento?.message} />
               </div>
               <div className="input-group">
                 <label className="input-label">Fecha de alta como asesor *</label>
@@ -331,6 +355,7 @@ export default function NewAdvisorPage() {
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </select>
+                <FieldError msg={errors.inviteByAdvisorId?.message} />
               </div>
             )}
 
@@ -355,6 +380,7 @@ export default function NewAdvisorPage() {
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </select>
+                <FieldError msg={errors.idMentor?.message} />
               </div>
             )}
           </div>
@@ -375,11 +401,15 @@ export default function NewAdvisorPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginTop: 14 }}>
               <div className="input-group">
                 <label className="input-label">Teléfono del beneficiario</label>
-                <input {...register('telefonoBeneficiario')} className="input" placeholder="5512345678" />
+                <input {...register('telefonoBeneficiario')} className="input" placeholder="5512345678"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
+                <FieldError msg={errors.telefonoBeneficiario?.message} />
               </div>
               <div className="input-group">
                 <label className="input-label">Correo del beneficiario</label>
                 <input {...register('correoBeneficiario')} type="email" className="input" placeholder="beneficiario@email.com" />
+                <FieldError msg={errors.correoBeneficiario?.message} />
               </div>
             </div>
           </div>

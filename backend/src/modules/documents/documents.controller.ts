@@ -21,8 +21,53 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 import { DocumentsService } from './documents.service';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
+import {
+  MAX_TEXTO_CORTO,
+  MAX_TEXTO_LARGO,
+} from '../../common/validation/patterns';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+
+const ENTIDADES = ['asesor', 'propiedad', 'cierre', 'cliente', 'operacion'];
+const DOC_STATUSES = ['Pendiente', 'Validado', 'Rechazado', 'Sustituido'];
+
+class UploadDocumentDto {
+  @IsNotEmpty({ message: 'La entidad es requerida.' })
+  @IsIn(ENTIDADES, {
+    message: `La entidad debe ser una de: ${ENTIDADES.join(', ')}.`,
+  })
+  entidad: string;
+
+  @IsNotEmpty({ message: 'El ID de la entidad es requerido.' })
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  idEntidad: string;
+
+  @IsNotEmpty({ message: 'El tipo de documento es requerido.' })
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  tipoDocumento: string;
+}
+
+class UpdateDocumentStatusDto {
+  @IsNotEmpty({ message: 'El estatus es requerido.' })
+  @IsIn(DOC_STATUSES, {
+    message: `El estatus debe ser uno de: ${DOC_STATUSES.join(', ')}.`,
+  })
+  status: 'Pendiente' | 'Validado' | 'Rechazado' | 'Sustituido';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TEXTO_LARGO)
+  observaciones?: string;
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('documents')
@@ -51,15 +96,13 @@ export class DocumentsController {
       }),
     )
     file: Express.Multer.File,
-    @Body('entidad') entidad: string,
-    @Body('idEntidad') idEntidad: string,
-    @Body('tipoDocumento') tipoDocumento: string,
+    @Body() body: UploadDocumentDto,
     @Request() req: any,
   ) {
     return this.documentsService.upload(file, {
-      entidad,
-      idEntidad,
-      tipoDocumento,
+      entidad: body.entidad,
+      idEntidad: body.idEntidad,
+      tipoDocumento: body.tipoDocumento,
       subidoPor: req.user.id,
     });
   }
@@ -95,11 +138,15 @@ export class DocumentsController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   async updateStatus(
     @Param('id') id: string,
-    @Body('status') status: 'Pendiente' | 'Validado' | 'Rechazado' | 'Sustituido',
-    @Body('observaciones') observaciones: string,
+    @Body() body: UpdateDocumentStatusDto,
     @Request() req: any,
   ) {
-    return this.documentsService.updateStatus(id, status, req.user.id, observaciones);
+    return this.documentsService.updateStatus(
+      id,
+      body.status,
+      req.user.id,
+      body.observaciones ?? '',
+    );
   }
 
   /**

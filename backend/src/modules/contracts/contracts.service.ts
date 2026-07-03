@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 
 const VALID_STATUSES = [
@@ -36,6 +40,8 @@ export class ContractsService {
          deposito_garantia, primer_pago_renta, forma_pago_renta,
          dia_pago_mensual, incluye_mantenimiento, servicios_incluidos,
          permite_mascotas, entrega_amueblado, observaciones_acuerdos,
+         observaciones_juridico, condiciones_especiales, formas_pago,
+         monto_apartado, fecha_estimada_escritura,
          estatus_solicitud, fecha_solicitud
        ) VALUES (
          @id, @tipoSolicitud, @idPropiedad, @idAsesorSolicitante,
@@ -56,66 +62,127 @@ export class ContractsService {
          @depositoGarantia, @primerPagoRenta, @formaPagoRenta,
          @diaPagoMensual, @incluyeMantenimiento, @serviciosIncluidos,
          @permiteMascotas, @entregaAmueblado, @observacionesAcuerdos,
+         @observacionesJuridico, @condicionesEspeciales, @formasPago,
+         @montoApartado, @fechaEstimadaEscritura,
          'Pendiente', NOW()
        )`,
       {
         id,
-        tipoSolicitud:              dto.tipo_solicitud ?? dto.tipoSolicitud ?? '',
-        idPropiedad:                dto.id_propiedad ?? dto.idPropiedad ?? '',
-        idAsesorSolicitante:        dto.id_asesor_solicitante ?? dto.idAsesorSolicitante ?? '',
-        precioRenta:                dto.precio_renta_acordada ?? dto.precioRentaAcordada ?? null,
-        fechaFirma:                 dto.fecha_firma_estimada ?? dto.fechaFirmaEstimada ?? null,
-        fechaEntrega:               dto.fecha_entrega_estimada ?? dto.fechaEntregaEstimada ?? null,
-        condicionesPago:            dto.condiciones_pago ?? dto.condicionesPago ?? '',
-        observacionesAsesor:        dto.observaciones_asesor ?? dto.observacionesAsesor ?? '',
-        confirmacionAsesor:         (dto.confirmacion_asesor ?? dto.confirmacionAsesor) ? 'true' : 'false',
-        repVendedorTipo:            dto.rep_vendedor_tipo ?? dto.repVendedorTipo ?? '',
-        asesorInternoVendedor:      dto.asesor_interno_vendedor ?? dto.asesorInternoVendedor ?? '',
-        nombreExternoVendedor:      dto.nombre_externo_vendedor ?? dto.nombreExternoVendedor ?? '',
-        telefonoExternoVendedor:    dto.telefono_externo_vendedor ?? dto.telefonoExternoVendedor ?? '',
-        correoExternoVendedor:      dto.correo_externo_vendedor ?? dto.correoExternoVendedor ?? '',
-        inmobiliariaExternaVendedor: dto.inmobiliaria_externa_vendedor ?? dto.inmobiliariaExternaVendedor ?? '',
-        repCompradorTipo:           dto.rep_comprador_tipo ?? dto.repCompradorTipo ?? '',
-        asesorInternoComprador:     dto.asesor_interno_comprador ?? dto.asesorInternoComprador ?? '',
-        nombreExternoComprador:     dto.nombre_externo_comprador ?? dto.nombreExternoComprador ?? '',
-        telefonoExternoComprador:   dto.telefono_externo_comprador ?? dto.telefonoExternoComprador ?? '',
-        correoExternoComprador:     dto.correo_externo_comprador ?? dto.correoExternoComprador ?? '',
-        inmobiliariaExternaComprador: dto.inmobiliaria_externa_comprador ?? dto.inmobiliariaExternaComprador ?? '',
-        comisionPactadaPct:         dto.comision_pactada_pct ?? dto.comisionPactadaPct ?? 0,
-        comisionPactadaMonto:       dto.comision_pactada_monto ?? dto.comisionPactadaMonto ?? 0,
-        existeComisionCompartida:   (dto.existe_comision_compartida ?? dto.existeComisionCompartida) ? 'true' : 'false',
-        detalleComisionCompartida:  dto.detalle_comision_compartida ?? dto.detalleComisionCompartida ?? '',
-        precioFinalAcordado:        dto.precio_final_acordado ?? dto.precioFinalAcordado ?? 0,
-        docsVendedorCompletos:      dto.docs_vendedor_completos ?? dto.docsVendedorCompletos ?? 'no',
-        docsVendedorFaltantes:      dto.docs_vendedor_faltantes ?? dto.docsVendedorFaltantes ?? '',
-        docsCompradorCompletos:     dto.docs_comprador_completos ?? dto.docsCompradorCompletos ?? 'no',
-        docsCompradorFaltantes:     dto.docs_comprador_faltantes ?? dto.docsCompradorFaltantes ?? '',
-        requiereAval:               (dto.requiere_aval ?? dto.requiereAval) ? 'true' : 'false',
-        tipoAval:                   dto.tipo_aval ?? dto.tipoAval ?? '',
-        nombreAval:                 dto.nombre_aval ?? dto.nombreAval ?? '',
-        telefonoAval:               dto.telefono_aval ?? dto.telefonoAval ?? '',
-        correoAval:                 dto.correo_aval ?? dto.correoAval ?? '',
+        tipoSolicitud: dto.tipo_solicitud ?? dto.tipoSolicitud ?? '',
+        idPropiedad: dto.id_propiedad ?? dto.idPropiedad ?? '',
+        idAsesorSolicitante:
+          dto.id_asesor_solicitante ?? dto.idAsesorSolicitante ?? '',
+        precioRenta:
+          dto.precio_renta_acordada ?? dto.precioRentaAcordada ?? null,
+        // El formulario envía fecha_estimada_firma; la columna es fecha_firma_estimada
+        fechaFirma:
+          dto.fecha_firma_estimada ??
+          dto.fecha_estimada_firma ??
+          dto.fechaFirmaEstimada ??
+          null,
+        fechaEntrega:
+          dto.fecha_entrega_estimada ?? dto.fechaEntregaEstimada ?? null,
+        condicionesPago: dto.condiciones_pago ?? dto.condicionesPago ?? '',
+        observacionesAsesor:
+          dto.observaciones_asesor ?? dto.observacionesAsesor ?? '',
+        confirmacionAsesor:
+          (dto.confirmacion_asesor ?? dto.confirmacionAsesor)
+            ? 'true'
+            : 'false',
+        repVendedorTipo: dto.rep_vendedor_tipo ?? dto.repVendedorTipo ?? '',
+        asesorInternoVendedor:
+          dto.asesor_interno_vendedor ?? dto.asesorInternoVendedor ?? '',
+        nombreExternoVendedor:
+          dto.nombre_externo_vendedor ?? dto.nombreExternoVendedor ?? '',
+        telefonoExternoVendedor:
+          dto.telefono_externo_vendedor ?? dto.telefonoExternoVendedor ?? '',
+        correoExternoVendedor:
+          dto.correo_externo_vendedor ?? dto.correoExternoVendedor ?? '',
+        inmobiliariaExternaVendedor:
+          dto.inmobiliaria_externa_vendedor ??
+          dto.inmobiliariaExternaVendedor ??
+          '',
+        repCompradorTipo: dto.rep_comprador_tipo ?? dto.repCompradorTipo ?? '',
+        asesorInternoComprador:
+          dto.asesor_interno_comprador ?? dto.asesorInternoComprador ?? '',
+        nombreExternoComprador:
+          dto.nombre_externo_comprador ?? dto.nombreExternoComprador ?? '',
+        telefonoExternoComprador:
+          dto.telefono_externo_comprador ?? dto.telefonoExternoComprador ?? '',
+        correoExternoComprador:
+          dto.correo_externo_comprador ?? dto.correoExternoComprador ?? '',
+        inmobiliariaExternaComprador:
+          dto.inmobiliaria_externa_comprador ??
+          dto.inmobiliariaExternaComprador ??
+          '',
+        comisionPactadaPct:
+          dto.comision_pactada_pct ?? dto.comisionPactadaPct ?? 0,
+        comisionPactadaMonto:
+          dto.comision_pactada_monto ?? dto.comisionPactadaMonto ?? 0,
+        existeComisionCompartida:
+          (dto.existe_comision_compartida ?? dto.existeComisionCompartida)
+            ? 'true'
+            : 'false',
+        detalleComisionCompartida:
+          dto.detalle_comision_compartida ??
+          dto.detalleComisionCompartida ??
+          '',
+        precioFinalAcordado:
+          dto.precio_final_acordado ?? dto.precioFinalAcordado ?? 0,
+        docsVendedorCompletos:
+          dto.docs_vendedor_completos ?? dto.docsVendedorCompletos ?? 'no',
+        docsVendedorFaltantes:
+          dto.docs_vendedor_faltantes ?? dto.docsVendedorFaltantes ?? '',
+        docsCompradorCompletos:
+          dto.docs_comprador_completos ?? dto.docsCompradorCompletos ?? 'no',
+        docsCompradorFaltantes:
+          dto.docs_comprador_faltantes ?? dto.docsCompradorFaltantes ?? '',
+        requiereAval:
+          (dto.requiere_aval ?? dto.requiereAval) ? 'true' : 'false',
+        tipoAval: dto.tipo_aval ?? dto.tipoAval ?? '',
+        nombreAval: dto.nombre_aval ?? dto.nombreAval ?? '',
+        telefonoAval: dto.telefono_aval ?? dto.telefonoAval ?? '',
+        correoAval: dto.correo_aval ?? dto.correoAval ?? '',
         // Cliente (comprador / arrendatario)
-        clienteTipo:                dto.cliente_tipo ?? dto.clienteTipo ?? 'Persona física',
-        clienteNombre:              dto.cliente_nombre ?? dto.clienteNombre ?? '',
-        clienteTelefono:            dto.cliente_telefono ?? dto.clienteTelefono ?? '',
-        clienteCorreo:              dto.cliente_correo ?? dto.clienteCorreo ?? '',
-        clienteEstadoCivil:         dto.cliente_estado_civil ?? dto.clienteEstadoCivil ?? '',
-        clienteRegimenPatrimonial:  dto.cliente_regimen_patrimonial ?? dto.clienteRegimenPatrimonial ?? '',
-        clienteNombreConyuge:       dto.cliente_nombre_conyuge ?? dto.clienteNombreConyuge ?? '',
+        clienteTipo: dto.cliente_tipo ?? dto.clienteTipo ?? 'Persona física',
+        clienteNombre: dto.cliente_nombre ?? dto.clienteNombre ?? '',
+        clienteTelefono: dto.cliente_telefono ?? dto.clienteTelefono ?? '',
+        clienteCorreo: dto.cliente_correo ?? dto.clienteCorreo ?? '',
+        clienteEstadoCivil:
+          dto.cliente_estado_civil ?? dto.clienteEstadoCivil ?? '',
+        clienteRegimenPatrimonial:
+          dto.cliente_regimen_patrimonial ??
+          dto.clienteRegimenPatrimonial ??
+          '',
+        clienteNombreConyuge:
+          dto.cliente_nombre_conyuge ?? dto.clienteNombreConyuge ?? '',
         // Arrendamiento
-        fechaInicioContrato:        dto.fecha_inicio_contrato ?? dto.fechaInicioContrato ?? null,
-        fechaEntregaInmueble:       dto.fecha_entrega_inmueble ?? dto.fechaEntregaInmueble ?? null,
-        vigencia:                   dto.vigencia ?? '',
-        depositoGarantia:           dto.deposito_garantia ?? dto.depositoGarantia ?? null,
-        primerPagoRenta:            dto.primer_pago_renta ?? dto.primerPagoRenta ?? null,
-        formaPagoRenta:             dto.forma_pago_renta ?? dto.formaPagoRenta ?? '',
-        diaPagoMensual:             dto.dia_pago_mensual ?? dto.diaPagoMensual ?? null,
-        incluyeMantenimiento:       (dto.incluye_mantenimiento ?? dto.incluyeMantenimiento) ? 'true' : 'false',
-        serviciosIncluidos:         dto.servicios_incluidos ?? dto.serviciosIncluidos ?? '',
-        permiteMascotas:            (dto.permite_mascotas ?? dto.permiteMascotas) ? 'true' : 'false',
-        entregaAmueblado:           (dto.entrega_amueblado ?? dto.entregaAmueblado) ? 'true' : 'false',
-        observacionesAcuerdos:      dto.observaciones_acuerdos ?? dto.observacionesAcuerdos ?? '',
+        fechaInicioContrato:
+          dto.fecha_inicio_contrato ?? dto.fechaInicioContrato ?? null,
+        fechaEntregaInmueble:
+          dto.fecha_entrega_inmueble ?? dto.fechaEntregaInmueble ?? null,
+        vigencia: dto.vigencia ?? '',
+        depositoGarantia: dto.deposito_garantia ?? dto.depositoGarantia ?? null,
+        primerPagoRenta: dto.primer_pago_renta ?? dto.primerPagoRenta ?? null,
+        formaPagoRenta: dto.forma_pago_renta ?? dto.formaPagoRenta ?? '',
+        diaPagoMensual: dto.dia_pago_mensual ?? dto.diaPagoMensual ?? null,
+        incluyeMantenimiento:
+          (dto.incluye_mantenimiento ?? dto.incluyeMantenimiento)
+            ? 'true'
+            : 'false',
+        serviciosIncluidos:
+          dto.servicios_incluidos ?? dto.serviciosIncluidos ?? '',
+        permiteMascotas:
+          (dto.permite_mascotas ?? dto.permiteMascotas) ? 'true' : 'false',
+        entregaAmueblado:
+          (dto.entrega_amueblado ?? dto.entregaAmueblado) ? 'true' : 'false',
+        observacionesAcuerdos:
+          dto.observaciones_acuerdos ?? dto.observacionesAcuerdos ?? '',
+        observacionesJuridico: dto.observaciones_juridico ?? '',
+        condicionesEspeciales: dto.condiciones_especiales ?? '',
+        formasPago: dto.formas_pago ?? '',
+        montoApartado: dto.monto_apartado ?? null,
+        fechaEstimadaEscritura: dto.fecha_estimada_escritura ?? null,
       },
     );
 
@@ -123,7 +190,7 @@ export class ContractsService {
     const clienteData = dto.cliente ?? dto.clienteData;
     if (clienteData && typeof clienteData === 'object') {
       const clienteId =
-        clienteData.id ?? ('cli-' + Math.random().toString(36).substring(2, 10));
+        clienteData.id ?? 'cli-' + Math.random().toString(36).substring(2, 10);
       await this.databaseService.query(
         `INSERT INTO public.dim_clientes (
            id, tipo_cliente, nombre_razon_social, persona_tipo, telefono,
@@ -133,14 +200,23 @@ export class ContractsService {
            @correo, @estadoCivil, @regimenPatrimonial
          )`,
         {
-          id:                 clienteId,
-          tipoCliente:        clienteData.tipo_cliente ?? clienteData.tipoCliente ?? '',
-          nombreRazonSocial:  clienteData.nombre_razon_social ?? clienteData.nombreRazonSocial ?? '',
-          personaTipo:        clienteData.persona_tipo ?? clienteData.personaTipo ?? '',
-          telefono:           clienteData.telefono ?? '',
-          correo:             clienteData.correo ?? '',
-          estadoCivil:        clienteData.estado_civil ?? clienteData.estadoCivil ?? '',
-          regimenPatrimonial: clienteData.regimen_patrimonial ?? clienteData.regimenPatrimonial ?? '',
+          id: clienteId,
+          tipoCliente:
+            clienteData.tipo_cliente ?? clienteData.tipoCliente ?? '',
+          nombreRazonSocial:
+            clienteData.nombre_razon_social ??
+            clienteData.nombreRazonSocial ??
+            '',
+          personaTipo:
+            clienteData.persona_tipo ?? clienteData.personaTipo ?? '',
+          telefono: clienteData.telefono ?? '',
+          correo: clienteData.correo ?? '',
+          estadoCivil:
+            clienteData.estado_civil ?? clienteData.estadoCivil ?? '',
+          regimenPatrimonial:
+            clienteData.regimen_patrimonial ??
+            clienteData.regimenPatrimonial ??
+            '',
         },
       );
     }
@@ -210,11 +286,17 @@ export class ContractsService {
        WHERE sc.id = @id LIMIT 1`,
       { id },
     );
-    if (!rows.length) throw new NotFoundException(`Contrato ${id} no encontrado.`);
+    if (!rows.length)
+      throw new NotFoundException(`Contrato ${id} no encontrado.`);
     return rows[0];
   }
 
-  async updateStatus(id: string, estatus: string, updatedBy: string, observaciones?: string) {
+  async updateStatus(
+    id: string,
+    estatus: string,
+    updatedBy: string,
+    observaciones?: string,
+  ) {
     if (!VALID_STATUSES.includes(estatus)) {
       throw new BadRequestException(
         `Estatus inválido. Valores permitidos: ${VALID_STATUSES.join(', ')}`,

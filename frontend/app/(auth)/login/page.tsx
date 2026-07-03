@@ -11,8 +11,8 @@ import { Eye, EyeOff, AlertCircle } from 'lucide-react';
 
 /* ── Schema ── */
 const schema = z.object({
-  email:    z.string().email('Ingresa un correo válido'),
-  password: z.string().min(4, 'Mínimo 4 caracteres'),
+  email:    z.string().trim().toLowerCase().email('Ingresa un correo válido'),
+  password: z.string().min(1, 'La contraseña es requerida'),
 });
 type Fields = z.infer<typeof schema>;
 
@@ -116,9 +116,10 @@ export default function LoginPage() {
     }
   };
 
+  // Solo autollena el correo: la contraseña nunca debe vivir en el código del cliente
   const fill = (email: string) => {
     setValue('email', email, { shouldValidate: true });
-    setValue('password', 'Idea2024!', { shouldValidate: true });
+    setValue('password', '', { shouldValidate: false });
     setError(null);
   };
 
@@ -272,7 +273,7 @@ export default function LoginPage() {
                 {/* Labels */}
                 <div style={{ textAlign: 'center' }}>
                   <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#e4e4e7', lineHeight: 1 }}>{u.role}</p>
-                  <p style={{ margin: '5px 0 0', fontSize: 10, color: '#3f3f46', fontFamily: 'monospace' }}>pass: admin</p>
+                  <p style={{ margin: '5px 0 0', fontSize: 10, color: '#3f3f46', fontFamily: 'monospace' }}>{u.email}</p>
                 </div>
               </button>
             );

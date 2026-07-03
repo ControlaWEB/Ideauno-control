@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
 import { FileText, ArrowLeft } from 'lucide-react';
+import { CLABE_RE, SOLO_LETRAS, soloDigitos, getApiErrorMessage } from '@/lib/validators';
 
 const MXN = (v: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
@@ -127,18 +128,29 @@ export default function AdvisorDetailPage() {
   };
 
   const handleBankSave = async () => {
-    if (!bankForm.clabe || !bankForm.banco || !bankForm.titular) {
+    const clabe = bankForm.clabe.trim();
+    const banco = bankForm.banco.trim();
+    const titular = bankForm.titular.trim();
+    if (!clabe || !banco || !titular) {
       setBankMsg({ text: 'Todos los campos bancarios son requeridos', ok: false });
+      return;
+    }
+    if (!CLABE_RE.test(clabe)) {
+      setBankMsg({ text: 'La CLABE debe tener exactamente 18 dígitos', ok: false });
+      return;
+    }
+    if (!SOLO_LETRAS.test(titular)) {
+      setBankMsg({ text: 'El titular solo puede contener letras, espacios y acentos', ok: false });
       return;
     }
     setBankSaving(true);
     setBankMsg(null);
     try {
-      await advisorsApi.updateBank(id, bankForm.clabe, bankForm.banco, bankForm.titular);
+      await advisorsApi.updateBank(id, clabe, banco, titular);
       queryClient.invalidateQueries({ queryKey: ['advisor', id] });
       setBankMsg({ text: 'Datos bancarios guardados', ok: true });
-    } catch (e: any) {
-      setBankMsg({ text: e?.response?.data?.message ?? 'Error al guardar datos bancarios', ok: false });
+    } catch (e: unknown) {
+      setBankMsg({ text: getApiErrorMessage(e, 'Error al guardar datos bancarios'), ok: false });
     } finally {
       setBankSaving(false);
     }
@@ -360,7 +372,12 @@ export default function AdvisorDetailPage() {
                       style={{ width: '100%', height: 40, fontSize: 13, boxSizing: 'border-box' }}
                       placeholder={placeholder}
                       value={bankForm[key as keyof typeof bankForm]}
-                      onChange={e => setBankForm(prev => ({ ...prev, [key]: e.target.value }))}
+                      inputMode={key === 'clabe' ? 'numeric' : undefined}
+                      maxLength={key === 'clabe' ? 18 : 120}
+                      onChange={e => {
+                        const v = key === 'clabe' ? soloDigitos(e.target.value, 18) : e.target.value;
+                        setBankForm(prev => ({ ...prev, [key]: v }));
+                      }}
                     />
                   </div>
                 ))}

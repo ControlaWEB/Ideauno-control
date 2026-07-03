@@ -35,13 +35,23 @@ function ParamRow({ param, onSave, saving }: {
   const [val, setVal] = useState(String(param.valor_numerico));
   const [saved, setSaved] = useState(false);
 
+  const [rowError, setRowError] = useState<string | null>(null);
+
   const handleSave = async () => {
     const n = parseFloat(val);
-    if (isNaN(n)) return;
-    await onSave(param.id, n);
-    setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!Number.isFinite(n)) { setRowError('Ingresa un número válido.'); return; }
+    if (n < 0) { setRowError('El valor no puede ser negativo.'); return; }
+    // Porcentajes se guardan como fracción (0.025 = 2.5%): tope 1
+    if (meta.isPercent && n > 1) { setRowError('Los porcentajes se capturan como fracción (ej. 0.025 = 2.5%). Máximo 1.'); return; }
+    setRowError(null);
+    try {
+      await onSave(param.id, n);
+      setEditing(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setRowError('Error al guardar el parámetro. Intenta de nuevo.');
+    }
   };
 
   const displayVal = meta.isPercent
@@ -59,13 +69,19 @@ function ParamRow({ param, onSave, saving }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {editing ? (
           <>
-            <input
-              type="number"
-              value={val}
-              onChange={e => setVal(e.target.value)}
-              style={{ width: 120, height: 32, padding: '0 10px', fontSize: 13, border: '1px solid var(--color-outline)', borderRadius: 'var(--radius-sm)' }}
-              autoFocus
-            />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <input
+                type="number"
+                min={0}
+                step="0.0001"
+                inputMode="decimal"
+                value={val}
+                onChange={e => setVal(e.target.value)}
+                style={{ width: 120, height: 32, padding: '0 10px', fontSize: 13, border: '1px solid var(--color-outline)', borderRadius: 'var(--radius-sm)' }}
+                autoFocus
+              />
+              {rowError && <span style={{ fontSize: 11, color: 'var(--color-error)', maxWidth: 180 }}>{rowError}</span>}
+            </div>
             <button className="btn btn-primary" style={{ height: 32, padding: '0 12px', fontSize: 12.5 }} onClick={handleSave} disabled={saving}>
               {saving ? '…' : 'Guardar'}
             </button>

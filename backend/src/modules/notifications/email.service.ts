@@ -32,7 +32,8 @@ function wrapBranded(title: string, bodyHtml: string): string {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private readonly resend = new Resend(process.env.RESEND_API_KEY);
-  private readonly from = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
+  private readonly from =
+    process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev';
 
   async send(to: string[], subject: string, bodyHtml: string) {
     if (to.length === 0) return;
@@ -52,12 +53,19 @@ export class EmailService {
         ],
       });
       if (error) {
-        this.logger.error(`Resend rechazó el correo "${subject}" a ${to.join(', ')}: ${JSON.stringify(error)}`);
+        this.logger.error(
+          `Resend rechazó el correo "${subject}" a ${to.join(', ')}: ${JSON.stringify(error)}`,
+        );
       } else {
-        this.logger.log(`Correo "${subject}" enviado a ${to.join(', ')} (id ${data?.id})`);
+        this.logger.log(
+          `Correo "${subject}" enviado a ${to.join(', ')} (id ${data?.id})`,
+        );
       }
     } catch (err) {
-      this.logger.error(`Fallo al enviar correo "${subject}" a ${to.join(', ')}`, err as Error);
+      this.logger.error(
+        `Fallo al enviar correo "${subject}" a ${to.join(', ')}`,
+        err as Error,
+      );
     }
   }
 }

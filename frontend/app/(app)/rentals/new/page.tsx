@@ -13,13 +13,38 @@ import {
   DollarSign, Camera, Shield, Upload, X, AlertCircle, Home,
 } from 'lucide-react';
 import { useHasAccess, AccessDenied } from '@/components/access-guard';
+import {
+  zNombre, zEmailOpcional, zTelefono, zFechaNoFutura,
+  MAX_TEXTO_LARGO, MAX_MONTO, MAX_SUPERFICIE,
+  soloDigitos, getApiErrorMessage,
+} from '@/lib/validators';
+
+/* ─── Piezas numéricas: vacío → undefined, sin NaN/negativos, con tope ─── */
+const zNumOpcional = (max: number, msg = 'Ingresa un número válido.') =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: msg })
+      .nonnegative('No puede ser negativo.')
+      .max(max, 'Excede el máximo permitido.')
+      .optional(),
+  );
+
+const zEnteroOpcional = (max: number) =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un número entero.' })
+      .int('Debe ser un número entero.')
+      .nonnegative('No puede ser negativo.')
+      .max(max, 'Excede el máximo permitido.')
+      .optional(),
+  );
 
 /* ─── Schema ─── */
 const schema = z.object({
   // S1 Propietario
-  ownerName:            z.string().min(2, 'Nombre del propietario requerido'),
-  ownerPhone:           z.string().min(10, 'Teléfono requerido'),
-  ownerEmail:           z.string().optional().or(z.literal('')),
+  ownerName:            zNombre,
+  ownerPhone:           zTelefono,
+  ownerEmail:           zEmailOpcional,
   ownerEstadoCivil:     z.string().min(1, 'Estado civil requerido'),
   tieneCopropietarios:  z.enum(['si', 'no']),
   quienRealizaContrato: z.string().min(1, 'Requerido'),
@@ -32,22 +57,29 @@ const schema = z.object({
 
   // S3 Datos inmueble
   tipoInmueble:           z.string().min(1, 'Tipo de inmueble requerido'),
-  address:                z.string().min(5, 'Dirección requerida'),
-  city:                   z.string().min(2, 'Ciudad requerida'),
+  address:                z.string().trim().min(5, 'Dirección requerida'),
+  city:                   zNombre,
+  state:                  zNombre,
   zona:                   z.string().optional().or(z.literal('')),
-  mapsUrl:                z.string().optional().or(z.literal('')),
-  superficieTerreno:      z.coerce.number().optional(),
-  superficieConstruccion: z.coerce.number().optional(),
-  recamaras:              z.coerce.number().optional(),
-  banosCompletos:         z.coerce.number().optional(),
-  mediosBanos:            z.coerce.number().optional(),
-  estacionamientos:       z.coerce.number().optional(),
-  niveles:                z.coerce.number().optional(),
+  mapsUrl:                z.string().trim().max(500).refine(
+    (v) => v === '' || /^https?:\/\/\S+$/i.test(v),
+    'Ingresa una URL válida (http/https).',
+  ).optional().or(z.literal('')),
+  superficieTerreno:      zNumOpcional(MAX_SUPERFICIE, 'Superficie inválida.'),
+  superficieConstruccion: zNumOpcional(MAX_SUPERFICIE, 'Superficie inválida.'),
+  recamaras:              zEnteroOpcional(100),
+  banosCompletos:         zEnteroOpcional(100),
+  mediosBanos:            zEnteroOpcional(100),
+  estacionamientos:       zEnteroOpcional(1000),
+  niveles:                zEnteroOpcional(200),
   estadoConservacion:     z.string().min(1, 'Requerido'),
   situacionActual:        z.string().min(1, 'Requerido'),
 
   // S4 Información de renta
-  rentaMensual:       z.coerce.number().min(1, 'Renta mensual requerida'),
+  rentaMensual: z.coerce.number({ message: 'Ingresa un monto válido.' })
+    .positive('La renta debe ser mayor a cero.')
+    .max(MAX_MONTO, 'El monto excede el máximo permitido.')
+    .refine((v) => Math.round(v * 100) === v * 100, 'Máximo 2 decimales.'),
   deposito:           z.string().min(1, 'Requerido'),
   plazoMinimo:        z.string().min(1, 'Requerido'),
   aceptaMascotas:     z.string().min(1, 'Requerido'),
@@ -57,7 +89,7 @@ const schema = z.object({
   aceptaObligadoSol:  z.enum(['si', 'no']),
   requierePolizaJur:  z.enum(['si', 'no']),
   tieneMantenimiento: z.enum(['si', 'no']),
-  montoMantenimiento: z.coerce.number().optional(),
+  montoMantenimiento: zNumOpcional(MAX_MONTO, 'Ingresa una cuota válida.'),
   amenidades:         z.string().optional().or(z.literal('')),
 
   // S5 Comercialización y autorización
@@ -66,10 +98,16 @@ const schema = z.object({
   autorizacionPromocion:     z.enum(['si', 'no']),
   tipoAutorizacion:          z.string().optional().or(z.literal('')),
   contratoComisionFirmado:   z.enum(['si', 'no']),
-  fechaFirmaContrato:        z.string().optional().or(z.literal('')),
+  fechaFirmaContrato:        zFechaNoFutura,
   vigenciaContrato:          z.string().optional().or(z.literal('')),
-  porcentajeComisionPactado: z.coerce.number().optional(),
-  observaciones:             z.string().optional().or(z.literal('')),
+  porcentajeComisionPactado: z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un porcentaje válido.' })
+      .nonnegative('No puede ser negativo.')
+      .max(100, 'El porcentaje no puede ser mayor a 100.')
+      .optional(),
+  ),
+  observaciones: z.string().trim().max(MAX_TEXTO_LARGO, `Máximo ${MAX_TEXTO_LARGO} caracteres.`).optional().or(z.literal('')),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -212,29 +250,48 @@ export default function RentalsNewPage() {
     setErrorMsg(null);
     try {
       const res = await propertiesApi.create({
-        tipo_operacion_principal: 'Renta',
+        // Campos comunes (camelCase, mismos que el DTO CreatePropertyDto)
         advisorId: user?.advisorId ?? user?.id,
-        tipo_inmueble:             data.tipoInmueble,
-        address:                   data.address,
-        city:                      data.city,
-        zona:                      data.zona,
-        maps_url:                  data.mapsUrl,
-        owner_name:                data.ownerName,
-        owner_phone:               data.ownerPhone,
-        owner_email:               data.ownerEmail,
-        owner_estado_civil:        data.ownerEstadoCivil,
-        tiene_copropietarios:      data.tieneCopropietarios === 'si',
+        tipoOperacion:           'Renta',
+        tipoInmueble:            data.tipoInmueble,
+        type:                    data.tipoInmueble,
+        address:                 data.address,
+        city:                    data.city,
+        state:                   data.state,
+        zona:                    data.zona,
+        mapsUrl:                 data.mapsUrl,
+        ownerName:               data.ownerName,
+        ownerPhone:              data.ownerPhone,
+        ownerEmail:              data.ownerEmail,
+        ownerEstadoCivil:        data.ownerEstadoCivil,
+        tieneCopropietarios:     data.tieneCopropietarios === 'si',
+        tienePredial:            data.tienePredial,
+        tieneAgua:               data.tieneAgua,
+        tieneLuz:                data.tieneLuz,
+        superficieTerreno:       data.superficieTerreno,
+        superficieConstruccion:  data.superficieConstruccion,
+        recamaras:               data.recamaras,
+        banosCompletos:          data.banosCompletos,
+        mediosBanos:             data.mediosBanos,
+        estacionamientos:        data.estacionamientos,
+        niveles:                 data.niveles,
+        estadoConservacion:      data.estadoConservacion,
+        situacionActual:         data.situacionActual,
+        // En renta, el precio de la propiedad es la renta mensual solicitada
+        price:                   data.rentaMensual,
+        cuotaMantenimiento:      data.tieneMantenimiento === 'si' ? data.montoMantenimiento : undefined,
+        amenidades:              data.amenidades,
+        autorizacionPromocion:   data.autorizacionPromocion === 'si',
+        tipoAutorizacion:        data.tipoAutorizacion,
+        contratoComisionFirmado: data.contratoComisionFirmado === 'si',
+        fechaFirmaContrato:      data.fechaFirmaContrato || undefined,
+        vigenciaContrato:        data.vigenciaContrato,
+        porcentajeComisionPactado: data.porcentajeComisionPactado,
+        observaciones:           data.observaciones,
+        // Campos específicos de renta (snake_case = columnas reales en BD)
+        tipo_operacion_principal:  'Renta',
         quien_realiza_contrato:    data.quienRealizaContrato,
         doc_acredita_propiedad:    data.docAcreditaPropiedad,
-        superficie_terreno_m2:     data.superficieTerreno,
-        superficie_construccion_m2:data.superficieConstruccion,
-        recamaras:                 data.recamaras,
-        banos_completos:           data.banosCompletos,
-        medios_banos:              data.mediosBanos,
-        estacionamientos:          data.estacionamientos,
-        niveles:                   data.niveles,
-        estado_conservacion:       data.estadoConservacion,
-        situacion_actual:          data.situacionActual,
         renta_mensual_solicitada:  data.rentaMensual,
         deposito_requerido:        data.deposito,
         plazo_minimo_contrato:     data.plazoMinimo,
@@ -244,21 +301,11 @@ export default function RentalsNewPage() {
         requiere_aval:             data.requiereAval === 'si',
         acepta_obligado_solidario: data.aceptaObligadoSol === 'si',
         requiere_poliza_juridica:  data.requierePolizaJur === 'si',
-        cuota_mantenimiento:       data.montoMantenimiento,
         servicios_incluidos:       JSON.stringify(servicios),
         equipamiento_incluido:     JSON.stringify(equipamiento),
-        amenidades:                data.amenidades,
         disponible_mostrarse:      data.disponibleMostrar === 'si',
         fecha_disponibilidad:      data.fechaDisponibilidad,
-        autoriza_promocion:        data.autorizacionPromocion === 'si',
-        tipo_autorizacion:         data.tipoAutorizacion,
-        contrato_comision_firmado: data.contratoComisionFirmado === 'si',
-        fecha_firma_contrato_comision: data.fechaFirmaContrato || null,
-        vigencia_contrato_comision:data.vigenciaContrato,
-        porcentaje_comision_pactado: data.porcentajeComisionPactado,
-        observaciones:             data.observaciones,
         status: data.contratoComisionFirmado === 'si' ? 'En revisión' : 'Incompleta',
-        type: data.tipoInmueble,
       } as Record<string, unknown>);
       const propertyId = res.data?.id;
       if (propertyId && Object.keys(files).length > 0) {
@@ -278,8 +325,8 @@ export default function RentalsNewPage() {
 
       setSuccess(true);
       setTimeout(() => router.push('/properties'), 2500);
-    } catch (err: any) {
-      setErrorMsg(err?.response?.data?.message ?? 'Error al guardar. Intenta de nuevo.');
+    } catch (err: unknown) {
+      setErrorMsg(getApiErrorMessage(err, 'Error al guardar. Intenta de nuevo.'));
     } finally {
       setUploading(false);
     }
@@ -347,7 +394,9 @@ export default function RentalsNewPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginTop: 14 }}>
               <div className="input-group">
                 <label className="input-label">Teléfono *</label>
-                <input {...register('ownerPhone')} className="input" placeholder="5512345678" />
+                <input {...register('ownerPhone')} className="input" placeholder="5512345678"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
                 <FieldError msg={errors.ownerPhone?.message} />
               </div>
               <div className="input-group">
@@ -494,8 +543,17 @@ export default function RentalsNewPage() {
                 <FieldError msg={errors.city?.message} />
               </div>
               <div className="input-group">
+                <label className="input-label">Estado *</label>
+                <input {...register('state')} className="input" placeholder="Ej: Jalisco" />
+                <FieldError msg={errors.state?.message} />
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14, marginTop: 14 }}>
+              <div className="input-group">
                 <label className="input-label">URL Google Maps</label>
                 <input {...register('mapsUrl')} className="input" placeholder="https://maps.google.com/..." />
+                <FieldError msg={errors.mapsUrl?.message} />
               </div>
             </div>
 

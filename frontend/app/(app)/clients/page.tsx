@@ -7,13 +7,15 @@ import { useForm } from 'react-hook-form';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { Users, Plus, X } from 'lucide-react';
+import { TELEFONO_MX, RFC_RE, MAX_NOMBRE, soloDigitos, getApiErrorMessage } from '@/lib/validators';
 
 const CREATE_ROLES = ['Super Admin', 'Admin', 'Asesor'];
 
+// El backend/BD usan 'Individual' | 'Corporate'; 'Empresa' es solo etiqueta visual
 interface Client {
   id: string;
   name: string;
-  type: 'Individual' | 'Empresa';
+  type: 'Individual' | 'Corporate';
   rfc?: string;
   phone?: string;
   email?: string;
@@ -21,7 +23,7 @@ interface Client {
 
 interface ClientForm {
   name: string;
-  type: 'Individual' | 'Empresa';
+  type: 'Individual' | 'Corporate';
   rfc: string;
   phone: string;
   email: string;
@@ -37,7 +39,8 @@ export default function ClientsPage() {
 
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ['clients'],
-    queryFn: () => api.get('/clients').then(r => r.data),
+    // El backend pagina: la lista viene en r.data.data
+    queryFn: () => api.get('/clients').then(r => r.data?.data ?? (Array.isArray(r.data) ? r.data : [])),
   });
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<ClientForm>({
@@ -49,17 +52,17 @@ export default function ClientsPage() {
     setSaveError(null);
     try {
       await api.post('/clients', {
-        name: data.name,
+        name: data.name.trim(),
         type: data.type,
-        rfc: data.rfc || undefined,
-        phone: data.phone || undefined,
-        email: data.email || undefined,
+        rfc: data.rfc?.trim() || undefined,
+        phone: data.phone?.trim() || undefined,
+        email: data.email.trim().toLowerCase(),
       });
       await queryClient.invalidateQueries({ queryKey: ['clients'] });
       reset();
       setShowForm(false);
-    } catch (err: any) {
-      setSaveError(err?.response?.data?.message ?? 'Error al guardar el cliente');
+    } catch (err: unknown) {
+      setSaveError(getApiErrorMessage(err, 'Error al guardar el cliente'));
     } finally {
       setSaving(false);
     }
@@ -72,7 +75,7 @@ export default function ClientsPage() {
   };
 
   const typeBadge = (type: string) => {
-    if (type === 'Empresa') return <span className="badge badge-warning">Empresa</span>;
+    if (type === 'Corporate' || type === 'Empresa') return <span className="badge badge-warning">Empresa</span>;
     return <span className="badge badge-primary">Individual</span>;
   };
 
@@ -117,7 +120,12 @@ export default function ClientsPage() {
                   <input
                     className="input"
                     placeholder="Ej. Juan García López"
-                    {...register('name', { required: 'Nombre requerido' })}
+                    maxLength={MAX_NOMBRE}
+                    {...register('name', {
+                      required: 'Nombre requerido',
+                      validate: (v) => v.trim().length > 0 || 'Nombre requerido',
+                      maxLength: { value: MAX_NOMBRE, message: `Máximo ${MAX_NOMBRE} caracteres.` },
+                    })}
                   />
                   {errors.name && <span style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 4 }}>{errors.name.message}</span>}
                 </div>
@@ -126,15 +134,15 @@ export default function ClientsPage() {
                 <div className="input-group">
                   <label className="input-label">Tipo</label>
                   <div style={{ display: 'flex', gap: 24, marginTop: 6 }}>
-                    {(['Individual', 'Empresa'] as const).map(t => (
-                      <label key={t} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
+                    {([['Individual', 'Individual'], ['Corporate', 'Empresa']] as const).map(([value, label]) => (
+                      <label key={value} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 14, cursor: 'pointer' }}>
                         <input
                           type="radio"
-                          value={t}
+                          value={value}
                           {...register('type')}
                           style={{ accentColor: 'var(--color-primary)' }}
                         />
-                        {t}
+                        {label}
                       </label>
                     ))}
                   </div>
@@ -146,8 +154,13 @@ export default function ClientsPage() {
                   <input
                     className="input"
                     placeholder="Opcional"
-                    {...register('rfc')}
+                    maxLength={13}
+                    style={{ textTransform: 'uppercase' }}
+                    {...register('rfc', {
+                      validate: (v) => v === '' || RFC_RE.test(v.trim()) || 'El RFC no tiene un formato válido.',
+                    })}
                   />
+                  {errors.rfc && <span style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 4 }}>{errors.rfc.message}</span>}
                 </div>
 
                 {/* Teléfono */}
@@ -156,9 +169,15 @@ export default function ClientsPage() {
                   <input
                     className="input"
                     type="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     placeholder="10 dígitos"
-                    {...register('phone')}
+                    onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }}
+                    {...register('phone', {
+                      validate: (v) => v === '' || TELEFONO_MX.test(v) || 'El teléfono debe tener exactamente 10 dígitos.',
+                    })}
                   />
+                  {errors.phone && <span style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 4 }}>{errors.phone.message}</span>}
                 </div>
 
                 {/* Correo */}
@@ -168,7 +187,10 @@ export default function ClientsPage() {
                     className="input"
                     type="email"
                     placeholder="correo@ejemplo.com"
-                    {...register('email')}
+                    {...register('email', {
+                      required: 'El correo electrónico es requerido.',
+                      pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: 'Ingresa un correo electrónico válido.' },
+                    })}
                   />
                   {errors.email && <span style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 4 }}>{errors.email.message}</span>}
                 </div>

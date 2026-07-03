@@ -9,19 +9,37 @@ import { z } from 'zod';
 import { api, propertiesApi } from '@/lib/api';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Home, AlertCircle, CheckCircle } from 'lucide-react';
+import {
+  zNombre, zEmailOpcional, zTelefono, zTelefonoOpcional, zNombreOpcional,
+  MAX_MONTO, MAX_TEXTO_LARGO, soloDigitos, getApiErrorMessage,
+} from '@/lib/validators';
+
+/* ─── Piezas numéricas ─── */
+const zNumOpcional = (max: number, msg = 'Ingresa un monto válido.') =>
+  z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: msg })
+      .nonnegative('No puede ser negativo.')
+      .max(max, 'Excede el máximo permitido.')
+      .optional(),
+  );
 
 /* ─── Schema ─── */
 const schema = z.object({
   idPropiedad:              z.string().min(1, 'Selecciona una propiedad'),
-  precioRentaAcordada:      z.coerce.number().min(1, 'Ingresa el monto acordado'),
-  fechaEstimadaFirma:       z.string().min(1, 'Fecha de firma requerida'),
-  condicionesEspeciales:    z.string().optional().or(z.literal('')),
-  observacionesJuridico:    z.string().optional().or(z.literal('')),
+  precioRentaAcordada:      z.coerce.number({ message: 'Ingresa un monto válido.' })
+    .positive('Ingresa el monto acordado.')
+    .max(MAX_MONTO, 'El monto excede el máximo permitido.')
+    .refine((v) => Math.round(v * 100) === v * 100, 'Máximo 2 decimales.'),
+  fechaEstimadaFirma:       z.string().min(1, 'Fecha de firma requerida')
+    .refine((v) => !Number.isNaN(Date.parse(v)), 'Fecha inválida.'),
+  condicionesEspeciales:    z.string().trim().max(MAX_TEXTO_LARGO).optional().or(z.literal('')),
+  observacionesJuridico:    z.string().trim().max(MAX_TEXTO_LARGO).optional().or(z.literal('')),
   // Comprador / Arrendatario
   clienteTipo:              z.enum(['Persona física', 'Persona moral']),
-  clienteNombre:            z.string().min(1, 'Nombre requerido'),
-  clienteTelefono:          z.string().min(1, 'Teléfono requerido'),
-  clienteCorreo:            z.string().optional().or(z.literal('')),
+  clienteNombre:            zNombre,
+  clienteTelefono:          zTelefono,
+  clienteCorreo:            zEmailOpcional,
   clienteEstadoCivil:       z.string().optional().or(z.literal('')),
   // Compraventa optional fields
   fpContado:                z.boolean().optional(),
@@ -30,16 +48,23 @@ const schema = z.object({
   fpFovissste:              z.boolean().optional(),
   fpCofinavit:              z.boolean().optional(),
   fpCombinado:              z.boolean().optional(),
-  montoApartado:            z.coerce.number().optional(),
+  montoApartado:            zNumOpcional(MAX_MONTO),
   fechaEstimadaEscritura:   z.string().optional().or(z.literal('')),
   // Arrendamiento optional fields
   fechaInicioContrato:      z.string().optional().or(z.literal('')),
   fechaEntregaInmueble:     z.string().optional().or(z.literal('')),
   vigencia:                 z.string().optional().or(z.literal('')),
-  depositoGarantia:         z.coerce.number().optional(),
-  primerPagoRenta:          z.coerce.number().optional(),
+  depositoGarantia:         zNumOpcional(MAX_MONTO),
+  primerPagoRenta:          zNumOpcional(MAX_MONTO),
   formaPagoRenta:           z.string().optional().or(z.literal('')),
-  diaPagoMensual:           z.coerce.number().optional(),
+  diaPagoMensual:           z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un día válido.' })
+      .int('Debe ser un número entero.')
+      .min(1, 'El día debe estar entre 1 y 31.')
+      .max(31, 'El día debe estar entre 1 y 31.')
+      .optional(),
+  ),
   incluyeMantenimiento:     z.boolean().optional(),
   srvAgua:                  z.boolean().optional(),
   srvLuz:                   z.boolean().optional(),
@@ -73,28 +98,34 @@ const schema = z.object({
   // Section 6 arrendamiento - Aval
   requiereAval:             z.boolean().optional(),
   tipoAval:                 z.string().optional().or(z.literal('')),
-  nombreAval:               z.string().optional().or(z.literal('')),
-  telefonoAval:             z.string().optional().or(z.literal('')),
-  correoAval:               z.string().optional().or(z.literal('')),
+  nombreAval:               zNombreOpcional,
+  telefonoAval:             zTelefonoOpcional,
+  correoAval:               zEmailOpcional,
   // Section 6 - Participación de asesores
   repVendedorTipo:             z.string().optional().or(z.literal('')),
   asesorInternoVendedor:       z.string().optional().or(z.literal('')),
-  nombreExternoVendedor:       z.string().optional().or(z.literal('')),
-  telefonoExternoVendedor:     z.string().optional().or(z.literal('')),
-  correoExternoVendedor:       z.string().optional().or(z.literal('')),
+  nombreExternoVendedor:       zNombreOpcional,
+  telefonoExternoVendedor:     zTelefonoOpcional,
+  correoExternoVendedor:       zEmailOpcional,
   inmobiliariaExternaVendedor: z.string().optional().or(z.literal('')),
   repCompradorTipo:            z.string().optional().or(z.literal('')),
   asesorInternoComprador:      z.string().optional().or(z.literal('')),
-  nombreExternoComprador:      z.string().optional().or(z.literal('')),
-  telefonoExternoComprador:    z.string().optional().or(z.literal('')),
-  correoExternoComprador:      z.string().optional().or(z.literal('')),
+  nombreExternoComprador:      zNombreOpcional,
+  telefonoExternoComprador:    zTelefonoOpcional,
+  correoExternoComprador:      zEmailOpcional,
   inmobiliariaExternaComprador: z.string().optional().or(z.literal('')),
   // Section 7 - Comisiones
-  comisionPactadaPct:          z.coerce.number().optional(),
-  comisionPactadaMonto:        z.coerce.number().optional(),
+  comisionPactadaPct:          z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un porcentaje válido.' })
+      .nonnegative('No puede ser negativo.')
+      .max(100, 'El porcentaje no puede ser mayor a 100.')
+      .optional(),
+  ),
+  comisionPactadaMonto:        zNumOpcional(MAX_MONTO),
   existeComisionCompartida:    z.boolean().optional(),
   detalleComisionCompartida:   z.string().optional().or(z.literal('')),
-  precioFinalAcordado:         z.coerce.number().optional(),
+  precioFinalAcordado:         zNumOpcional(MAX_MONTO),
   // Confirmation
   confirmacion: z.literal(true, { error: () => ({ message: 'Debes confirmar que la información es correcta' }) }),
 });
@@ -274,8 +305,8 @@ export default function NewContractPage() {
 
       setSuccess(true);
       setTimeout(() => router.push('/contracts'), 2500);
-    } catch (err: any) {
-      setErrorMsg(err?.response?.data?.message ?? 'Error al enviar la solicitud. Intenta de nuevo.');
+    } catch (err: unknown) {
+      setErrorMsg(getApiErrorMessage(err, 'Error al enviar la solicitud. Intenta de nuevo.'));
     }
   };
 
@@ -428,7 +459,7 @@ export default function NewContractPage() {
                 <label className="input-label">
                   {isCompraventa ? 'Precio final acordado ($)' : 'Renta mensual acordada ($)'} *
                 </label>
-                <input {...register('precioRentaAcordada')} type="number" className="input" placeholder="0" />
+                <input {...register('precioRentaAcordada')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
                 <Err msg={errors.precioRentaAcordada?.message} />
               </div>
               <div className="input-group">
@@ -522,7 +553,7 @@ export default function NewContractPage() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="input-group">
                   <label className="input-label">Monto de apartado ($)</label>
-                  <input {...register('montoApartado')} type="number" className="input" placeholder="Opcional" />
+                  <input {...register('montoApartado')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="Opcional" />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Fecha estimada de escrituración</label>
@@ -557,11 +588,11 @@ export default function NewContractPage() {
                 </div>
                 <div className="input-group">
                   <label className="input-label">Depósito en garantía ($) *</label>
-                  <input {...register('depositoGarantia')} type="number" className="input" placeholder="0" />
+                  <input {...register('depositoGarantia')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Primer pago de renta ($)</label>
-                  <input {...register('primerPagoRenta')} type="number" className="input" placeholder="0" />
+                  <input {...register('primerPagoRenta')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
                 </div>
                 <div className="input-group">
                   <label className="input-label">Forma de pago de renta</label>
@@ -641,7 +672,9 @@ export default function NewContractPage() {
               </div>
               <div className="input-group">
                 <label className="input-label">Teléfono *</label>
-                <input {...register('clienteTelefono')} className="input" placeholder="10 dígitos" />
+                <input {...register('clienteTelefono')} className="input" placeholder="10 dígitos"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
                 <Err msg={errors.clienteTelefono?.message} />
               </div>
               <div className="input-group">
@@ -754,7 +787,9 @@ export default function NewContractPage() {
                     </div>
                     <div className="input-group">
                       <label className="input-label">Teléfono</label>
-                      <input {...register('telefonoAval')} className="input" placeholder="10 dígitos" />
+                      <input {...register('telefonoAval')} className="input" placeholder="10 dígitos"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
                     </div>
                     <div className="input-group">
                       <label className="input-label">Correo electrónico</label>
@@ -809,7 +844,9 @@ export default function NewContractPage() {
                   </div>
                   <div className="input-group">
                     <label className="input-label">Teléfono</label>
-                    <input {...register('telefonoExternoVendedor')} className="input" placeholder="10 dígitos" />
+                    <input {...register('telefonoExternoVendedor')} className="input" placeholder="10 dígitos"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
                   </div>
                   <div className="input-group">
                     <label className="input-label">Correo</label>
@@ -859,7 +896,9 @@ export default function NewContractPage() {
                   </div>
                   <div className="input-group">
                     <label className="input-label">Teléfono</label>
-                    <input {...register('telefonoExternoComprador')} className="input" placeholder="10 dígitos" />
+                    <input {...register('telefonoExternoComprador')} className="input" placeholder="10 dígitos"
+                  inputMode="numeric" maxLength={10}
+                  onInput={(e) => { e.currentTarget.value = soloDigitos(e.currentTarget.value, 10); }} />
                   </div>
                   <div className="input-group">
                     <label className="input-label">Correo</label>
@@ -881,11 +920,11 @@ export default function NewContractPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
               <div className="input-group">
                 <label className="input-label">Precio/Renta final acordado ($)</label>
-                <input {...register('precioFinalAcordado')} type="number" className="input" placeholder="0" min={0} />
+                <input {...register('precioFinalAcordado')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
               </div>
               <div className="input-group">
                 <label className="input-label">Comisión pactada (%)</label>
-                <input {...register('comisionPactadaPct')} type="number" className="input" placeholder="0.00" min={0} step={0.01} />
+                <input {...register('comisionPactadaPct')} type="number" min={0} max={100} step={0.01} inputMode="decimal" className="input" placeholder="0.00" />
               </div>
             </div>
 

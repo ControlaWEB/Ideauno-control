@@ -5,7 +5,14 @@ import { DatabaseService } from '../../database/database.service';
 export class ClientsService {
   constructor(private databaseService: DatabaseService) {}
 
-  async findAll(filters: { search?: string; type?: string; page?: number; limit?: number } = {}) {
+  async findAll(
+    filters: {
+      search?: string;
+      type?: string;
+      page?: number;
+      limit?: number;
+    } = {},
+  ) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 20;
     const offset = (page - 1) * limit;
@@ -13,7 +20,9 @@ export class ClientsService {
     const params: Record<string, any> = { limit, offset };
 
     if (filters.search) {
-      clauses.push(`(name ILIKE @search OR email ILIKE @search OR rfc ILIKE @search)`);
+      clauses.push(
+        `(name ILIKE @search OR email ILIKE @search OR rfc ILIKE @search)`,
+      );
       params.search = `%${filters.search}%`;
     }
     if (filters.type) {
@@ -80,16 +89,30 @@ export class ClientsService {
     return { id, ...dto };
   }
 
+  // Solo estas columnas son editables; los keys del body no se interpolan en el SQL
+  private static readonly UPDATABLE_COLUMNS = [
+    'name',
+    'email',
+    'phone',
+    'rfc',
+    'type',
+  ];
+
   async update(id: string, dto: Partial<any>) {
     await this.findOne(id);
 
-    const fields = Object.keys(dto);
+    const fields = Object.keys(dto).filter(
+      (f) =>
+        ClientsService.UPDATABLE_COLUMNS.includes(f) && dto[f] !== undefined,
+    );
     if (fields.length === 0) return this.findOne(id);
 
     const setClauses = fields.map((field) => `${field} = @${field}`);
     const sql = `UPDATE public.clients SET ${setClauses.join(', ')}, updated_at = NOW() WHERE id = @id`;
 
-    await this.databaseService.query(sql, { id, ...dto });
+    const params: Record<string, any> = { id };
+    for (const f of fields) params[f] = dto[f];
+    await this.databaseService.query(sql, params);
     return this.findOne(id);
   }
 }

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { DatabaseModule } from './database/database.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { PropertiesModule } from './modules/properties/properties.module';
@@ -16,9 +17,7 @@ import { TemplatesModule } from './modules/templates/templates.module';
 
 @Module({
   imports: [
-    ThrottlerModule.forRoot([
-      { name: 'short', ttl: 60000, limit: 100 },
-    ]),
+    ThrottlerModule.forRoot([{ name: 'short', ttl: 60000, limit: 100 }]),
     DatabaseModule,
     AuthModule,
     DashboardModule,
@@ -32,6 +31,10 @@ import { TemplatesModule } from './modules/templates/templates.module';
     ContractsModule,
     AuditModule,
     TemplatesModule,
+  ],
+  providers: [
+    // Aplica el rate limiting configurado arriba a todos los endpoints
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}

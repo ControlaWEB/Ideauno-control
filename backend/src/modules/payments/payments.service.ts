@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../notifications/email.service';
@@ -11,7 +15,11 @@ export class PaymentsService {
     private emailService: EmailService,
   ) {}
 
-  private async notifyAdvisorOfPayment(paymentId: string, subject: string, bodyHtml: string) {
+  private async notifyAdvisorOfPayment(
+    paymentId: string,
+    subject: string,
+    bodyHtml: string,
+  ) {
     const [row] = await this.databaseService.query<any>(
       `SELECT a.email FROM public.fact_pagos p
        LEFT JOIN public.advisors a ON p.id_asesor = a.id
@@ -29,8 +37,29 @@ export class PaymentsService {
        FROM public.commissions WHERE id = @id LIMIT 1`,
       { id: commissionId },
     );
-    if (!rows.length) throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
+    if (!rows.length)
+      throw new NotFoundException(`Comisión ${commissionId} no encontrada.`);
     const commission = rows[0];
+
+    // La comisión debe pertenecer al asesor indicado
+    if (commission.advisor_id !== advisorId) {
+      throw new BadRequestException(
+        'La comisión no pertenece al asesor indicado.',
+      );
+    }
+
+    // Evitar solicitudes duplicadas de pago para la misma comisión
+    const existing = await this.databaseService.query<any>(
+      `SELECT id FROM public.fact_pagos
+       WHERE id_comision = @idComision AND estatus_pago IN ('Solicitado', 'Autorizado')
+       LIMIT 1`,
+      { idComision: commissionId },
+    );
+    if (existing.length > 0) {
+      throw new BadRequestException(
+        'Ya existe una solicitud de pago activa para esta comisión.',
+      );
+    }
 
     if (commission.estatus_comision !== 'Liberada') {
       throw new BadRequestException(
@@ -44,7 +73,12 @@ export class PaymentsService {
       `INSERT INTO public.fact_pagos
          (id, id_comision, id_asesor, fecha_solicitud, monto_solicitado, estatus_pago)
        VALUES (@id, @idComision, @idAsesor, NOW(), @monto, 'Solicitado')`,
-      { id, idComision: commissionId, idAsesor: advisorId, monto: commission.amount },
+      {
+        id,
+        idComision: commissionId,
+        idAsesor: advisorId,
+        monto: commission.amount,
+      },
     );
 
     return { id, estatus_pago: 'Solicitado' };
@@ -139,7 +173,11 @@ export class PaymentsService {
     adminId: string,
     formaPago: string,
     monto: number,
-    options?: { requiereCfdi?: boolean; uuidCfdi?: string; referenciaTransferencia?: string },
+    options?: {
+      requiereCfdi?: boolean;
+      uuidCfdi?: string;
+      referenciaTransferencia?: string;
+    },
   ) {
     await this.findOne(id);
     await this.databaseService.query(
@@ -150,7 +188,10 @@ export class PaymentsService {
            referencia_transferencia = @refTransferencia
        WHERE id = @id`,
       {
-        id, adminId, formaPago, monto,
+        id,
+        adminId,
+        formaPago,
+        monto,
         requiereCfdi: options?.requiereCfdi ?? false,
         uuidCfdi: options?.uuidCfdi ?? null,
         refTransferencia: options?.referenciaTransferencia ?? null,

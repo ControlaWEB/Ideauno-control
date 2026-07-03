@@ -1,4 +1,8 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  ConflictException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { DatabaseService } from '../../database/database.service';
 import * as bcrypt from 'bcrypt';
@@ -12,21 +16,32 @@ export class AuthService {
   ) {}
 
   async login(email: string, pass: string) {
-    const sql = `SELECT * FROM public.usuarios WHERE email = @email LIMIT 1`;
-    const users = await this.databaseService.query<any>(sql, { email });
+    const normalizedEmail = email.trim().toLowerCase();
+    const sql = `SELECT * FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`;
+    const users = await this.databaseService.query<any>(sql, {
+      email: normalizedEmail,
+    });
 
+    // Mensaje único para correo inexistente y contraseña incorrecta:
+    // evita enumeración de cuentas registradas.
     if (users.length === 0) {
-      throw new UnauthorizedException('Credenciales inválidas: correo no registrado.');
+      // Comparación dummy para igualar el tiempo de respuesta
+      await bcrypt.compare(
+        pass,
+        '$2b$10$C6UzMDM.H6dfI/f/IKcEeO7ZDBQnEnJ0S3dP7NFH1S1S1S1S1S1S2',
+      );
+      throw new UnauthorizedException('Credenciales inválidas.');
     }
 
     const user = users[0];
-    if (user.status !== 'Active') {
-      throw new UnauthorizedException('Cuenta suspendida o inactiva.');
-    }
 
     const isMatch = await bcrypt.compare(pass, user.password_hash);
     if (!isMatch) {
-      throw new UnauthorizedException('Credenciales inválidas: contraseña incorrecta.');
+      throw new UnauthorizedException('Credenciales inválidas.');
+    }
+
+    if (user.status !== 'Active') {
+      throw new UnauthorizedException('Cuenta suspendida o inactiva.');
     }
 
     // Resolve advisor ID if role is Asesor
@@ -39,12 +54,19 @@ export class AuthService {
       advisorId = advRows[0]?.id ?? null;
     }
 
-    const payload = { id: user.id, email: user.email, name: user.name, role: user.role, advisorId };
+    const payload = {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      advisorId,
+    };
 
     const jwtSecret = process.env.JWT_SECRET;
     const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET;
     if (!jwtSecret) throw new Error('JWT_SECRET env var not set');
-    if (!jwtRefreshSecret) throw new Error('JWT_REFRESH_SECRET env var not set');
+    if (!jwtRefreshSecret)
+      throw new Error('JWT_REFRESH_SECRET env var not set');
 
     const accessToken = await this.jwtService.signAsync(payload, {
       secret: jwtSecret,
@@ -73,18 +95,35 @@ export class AuthService {
   async refresh(token: string) {
     try {
       const payload = await this.jwtService.verifyAsync(token, {
-        secret: process.env.JWT_REFRESH_SECRET ?? (() => { throw new Error('JWT_REFRESH_SECRET not set'); })(),
+        secret:
+          process.env.JWT_REFRESH_SECRET ??
+          (() => {
+            throw new Error('JWT_REFRESH_SECRET not set');
+          })(),
       });
 
-      const newPayload = { id: payload.id, email: payload.email, name: payload.name, role: payload.role };
+      // Conservar advisorId: sin él, los checks de propiedad de Asesor fallan tras el refresh
+      const newPayload = {
+        id: payload.id,
+        email: payload.email,
+        name: payload.name,
+        role: payload.role,
+        advisorId: payload.advisorId ?? null,
+      };
       const accessToken = await this.jwtService.signAsync(newPayload, {
-        secret: process.env.JWT_SECRET ?? (() => { throw new Error('JWT_SECRET not set'); })(),
+        secret:
+          process.env.JWT_SECRET ??
+          (() => {
+            throw new Error('JWT_SECRET not set');
+          })(),
         expiresIn: '15m',
       });
 
       return { accessToken };
     } catch (err) {
-      throw new UnauthorizedException('Token de actualización expirado o inválido.');
+      throw new UnauthorizedException(
+        'Token de actualización expirado o inválido.',
+      );
     }
   }
 
@@ -109,11 +148,15 @@ export class AuthService {
   }
 
   async register(name: string, email: string, pass: string, role: string) {
-    const checkSql = `SELECT * FROM public.usuarios WHERE email = @email LIMIT 1`;
-    const existing = await this.databaseService.query<any>(checkSql, { email });
+    const normalizedEmail = email.trim().toLowerCase();
+    const checkSql = `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`;
+    const existing = await this.databaseService.query<any>(checkSql, {
+      email: normalizedEmail,
+    });
     if (existing.length > 0) {
-      throw new BadRequestException('El correo electrónico ya está registrado.');
+      throw new ConflictException('El correo electrónico ya está registrado.');
     }
+    email = normalizedEmail;
 
     const id = randomUUID();
     const passHash = await bcrypt.hash(pass, 10);

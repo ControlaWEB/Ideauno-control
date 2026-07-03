@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/utils';
 import {
   Wallet, CreditCard, CheckCircle2, XCircle, Clock,
 } from 'lucide-react';
+import { getApiErrorMessage } from '@/lib/validators';
 
 const formatMXN = (v: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
@@ -67,8 +68,8 @@ export default function PaymentsPage() {
       await queryClient.invalidateQueries({ queryKey: ['payments'] });
       await queryClient.invalidateQueries({ queryKey: ['commissions'] });
       toast('Solicitud de pago enviada correctamente');
-    } catch {
-      toast('Error al solicitar el pago', true);
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, 'Error al solicitar el pago'), true);
     } finally {
       setLoader(commId, false);
     }
@@ -106,17 +107,26 @@ export default function PaymentsPage() {
       toast('Selecciona forma de pago e ingresa el monto', true);
       return;
     }
+    const monto = Number(form.montoPagado);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      toast('El monto pagado debe ser un número mayor a cero', true);
+      return;
+    }
+    if (Math.round(monto * 100) !== monto * 100) {
+      toast('El monto pagado admite máximo 2 decimales', true);
+      return;
+    }
     setLoader(`paid-${id}`, true);
     try {
       await api.patch(`/payments/${id}/paid`, {
         formaPago:   form.formaPago,
-        montoPagado: Number(form.montoPagado),
+        montoPagado: monto,
       });
       await queryClient.invalidateQueries({ queryKey: ['payments'] });
       setPaidForms(prev => { const n = { ...prev }; delete n[id]; return n; });
       toast('Pago registrado exitosamente');
-    } catch {
-      toast('Error al registrar el pago', true);
+    } catch (err: unknown) {
+      toast(getApiErrorMessage(err, 'Error al registrar el pago'), true);
     } finally {
       setLoader(`paid-${id}`, false);
     }

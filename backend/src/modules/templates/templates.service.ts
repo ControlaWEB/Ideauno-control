@@ -18,7 +18,12 @@ export class TemplatesService {
 
   async upload(
     file: Express.Multer.File,
-    meta: { nombre: string; categoria: string; descripcion?: string; subidoPor: string },
+    meta: {
+      nombre: string;
+      categoria: string;
+      descripcion?: string;
+      subidoPor: string;
+    },
   ) {
     const id = 'plt-' + Math.random().toString(36).substring(2, 10);
     const ext = file.originalname.split('.').pop() ?? 'pdf';
@@ -26,7 +31,10 @@ export class TemplatesService {
 
     const { data, error } = await this.db.storageClient
       .from(BUCKET)
-      .upload(storagePath, file.buffer, { contentType: file.mimetype, upsert: false });
+      .upload(storagePath, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      });
 
     if (error) throw new Error(`Storage upload failed: ${error.message}`);
 
@@ -59,7 +67,9 @@ export class TemplatesService {
 
     const { data, error } = await this.db.storageClient
       .from(BUCKET)
-      .createSignedUrl(tpl.storage_path, SIGNED_URL_TTL, { download: tpl.nombre_archivo });
+      .createSignedUrl(tpl.storage_path, SIGNED_URL_TTL, {
+        download: tpl.nombre_archivo,
+      });
     if (error) throw new Error(`Signed URL error: ${error.message}`);
 
     return { id, signedUrl: data.signedUrl, expiresInSeconds: SIGNED_URL_TTL };
@@ -73,7 +83,9 @@ export class TemplatesService {
     if (!tpl) throw new NotFoundException(`Plantilla ${id} no encontrada.`);
 
     await this.db.storageClient.from(BUCKET).remove([tpl.storage_path]);
-    await this.db.query(`DELETE FROM public.dim_plantillas WHERE id = @id`, { id });
+    await this.db.query(`DELETE FROM public.dim_plantillas WHERE id = @id`, {
+      id,
+    });
     return { deleted: true };
   }
 }

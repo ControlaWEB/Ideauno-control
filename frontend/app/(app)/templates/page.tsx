@@ -29,18 +29,24 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
   const fileRef = useRef<HTMLInputElement>(null);
 
   const submit = async () => {
-    if (!nombre || !file) {
+    if (!nombre.trim() || !file) {
       setError('Nombre y archivo son obligatorios.');
+      return;
+    }
+    if (!['KYC', 'PLD', 'Contrato', 'Otro'].includes(categoria)) {
+      setError('Categoría inválida.');
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await templatesApi.upload(file, nombre, categoria, descripcion);
+      await templatesApi.upload(file, nombre.trim(), categoria, descripcion.trim());
       onUploaded();
       onClose();
-    } catch {
-      setError('Error al subir la plantilla.');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { message?: string | string[] } } };
+      const msg = e?.response?.data?.message;
+      setError(Array.isArray(msg) ? msg.join(' ') : (msg ?? 'Error al subir la plantilla.'));
     } finally {
       setSaving(false);
     }
