@@ -145,7 +145,7 @@ export class DocumentsService {
         await this.emailService.send(
           [uploader.email],
           `Documento rechazado: ${doc.tipo_documento}`,
-          `<p>Tu documento <strong>${doc.tipo_documento}</strong> fue rechazado.</p>${observaciones ? `<p><strong>Motivo:</strong> ${observaciones}</p>` : ''}`,
+          `<p>El documento <strong>${doc.tipo_documento}</strong> (subido por ${uploader.email}) fue rechazado.</p>${observaciones ? `<p><strong>Motivo:</strong> ${observaciones}</p>` : ''}`,
         );
       }
     }

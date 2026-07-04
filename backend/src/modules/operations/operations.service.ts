@@ -581,7 +581,7 @@ export class OperationsService {
     await this.notifyAdvisor(
       comm.advisor_id,
       `Comisión liberada: ${commissionId}`,
-      `<p>Tu comisión <strong>${commissionId}</strong> fue liberada. Ya puedes solicitar tu pago.</p>`,
+      `<p>La comisión <strong>${commissionId}</strong> fue liberada y ya puede solicitarse el pago.</p>`,
     );
     await this.notificationsService.createForAdvisor({
       advisorId: comm.advisor_id,
@@ -620,7 +620,7 @@ export class OperationsService {
     await this.notifyAdvisor(
       rows[0].advisor_id,
       `Comisión bloqueada: ${commissionId}`,
-      `<p>Tu comisión <strong>${commissionId}</strong> fue bloqueada.</p><p><strong>Motivo:</strong> ${motivo}</p>`,
+      `<p>La comisión <strong>${commissionId}</strong> fue bloqueada.</p><p><strong>Motivo:</strong> ${motivo}</p>`,
     );
     await this.notificationsService.createForAdvisor({
       advisorId: rows[0].advisor_id,
@@ -658,7 +658,7 @@ export class OperationsService {
     await this.notifyAdvisor(
       rows[0].advisor_id,
       `Comisión desbloqueada: ${commissionId}`,
-      `<p>Tu comisión <strong>${commissionId}</strong> fue desbloqueada y sigue su proceso normal.</p>`,
+      `<p>La comisión <strong>${commissionId}</strong> fue desbloqueada y sigue su proceso normal.</p>`,
     );
     await this.notificationsService.createForAdvisor({
       advisorId: rows[0].advisor_id,
@@ -736,7 +736,7 @@ export class OperationsService {
       await this.notifyAdvisor(
         commRows[0].advisor_id,
         `Operación cancelada: ${id}`,
-        `<p>Tu operación <strong>${id}</strong> fue cancelada.</p><p><strong>Motivo:</strong> ${motivo}</p>`,
+        `<p>La operación <strong>${id}</strong> fue cancelada.</p><p><strong>Motivo:</strong> ${motivo}</p>`,
       );
       await this.notificationsService.createForAdvisor({
         advisorId: commRows[0].advisor_id,

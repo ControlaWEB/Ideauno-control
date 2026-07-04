@@ -186,7 +186,7 @@ export class PaymentsService {
     await this.notifyAdvisorOfPayment(
       id,
       `Pago autorizado: ${id}`,
-      `<p>Tu pago <strong>${id}</strong> fue autorizado y está en proceso.</p>`,
+      `<p>El pago <strong>${id}</strong> fue autorizado y está en proceso.</p>`,
       {
         type: 'PAYMENT_AUTHORIZED',
         title: 'Pago autorizado',
@@ -234,7 +234,7 @@ export class PaymentsService {
     await this.notifyAdvisorOfPayment(
       id,
       `Pago realizado: ${id}`,
-      `<p>Tu pago <strong>${id}</strong> fue procesado.</p>
+      `<p>El pago <strong>${id}</strong> fue procesado.</p>
        <p><strong>Monto:</strong> $${Number(monto).toLocaleString('es-MX')} MXN<br/>
        <strong>Forma de pago:</strong> ${formaPago}</p>`,
       {
@@ -263,7 +263,7 @@ export class PaymentsService {
     await this.notifyAdvisorOfPayment(
       id,
       `Pago rechazado: ${id}`,
-      `<p>Tu solicitud de pago <strong>${id}</strong> fue rechazada.</p>${observaciones ? `<p><strong>Motivo:</strong> ${observaciones}</p>` : ''}`,
+      `<p>La solicitud de pago <strong>${id}</strong> fue rechazada.</p>${observaciones ? `<p><strong>Motivo:</strong> ${observaciones}</p>` : ''}`,
       {
         type: 'PAYMENT_REJECTED',
         title: 'Pago rechazado',

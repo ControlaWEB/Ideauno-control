@@ -249,11 +249,12 @@ export class AdvisorsService {
 
     await this.emailService.send(
       [dto.email],
-      'Bienvenido a Idea Uno Control',
-      `<p>Hola <strong>${dto.name}</strong>, tu cuenta de asesor fue creada.</p>
-       <p><strong>Correo:</strong> ${dto.email}<br/>
+      'Alta de nuevo asesor',
+      `<p>Se creó una cuenta de asesor en el sistema.</p>
+       <p><strong>Asesor:</strong> ${dto.name}<br/>
+       <strong>Correo:</strong> ${dto.email}<br/>
        <strong>Contraseña temporal:</strong> ${tempPassword}</p>
-       <p>Te recomendamos cambiar tu contraseña al iniciar sesión por primera vez.</p>`,
+       <p>El asesor deberá cambiar la contraseña al iniciar sesión por primera vez.</p>`,
     );
 
     return { id, userId, tempPassword, ...dto };
