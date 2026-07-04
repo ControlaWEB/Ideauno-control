@@ -19,7 +19,7 @@ const STATUS_MAP: Record<string, { label: string; class: string }> = {
 type Advisor = {
   id: string; name: string; email: string; phone: string;
   status: string; rfc?: string; curp?: string;
-  invite_by_advisor_id?: string; pasa_por_mentoria?: string;
+  invite_by_advisor_id?: string; inviterName?: string; pasa_por_mentoria?: string;
   fecha_alta_asesor?: string; created_at?: string;
 };
 
@@ -51,7 +51,7 @@ function AdvisorModal({ advisor, onClose, amaMap }: { advisor: Advisor; onClose:
             ['RFC', advisor.rfc || '—'],
             ['CURP', advisor.curp || '—'],
             ['Fecha alta', advisor.fecha_alta_asesor ? formatDate(advisor.fecha_alta_asesor) : '—'],
-            ['Invitado por', advisor.invite_by_advisor_id || 'Directo'],
+            ['Invitado por', advisor.inviterName || advisor.invite_by_advisor_id || 'Directo'],
           ].map(([l, v]) => (
             <div key={String(l)} style={{ background: 'var(--color-surface-variant)', borderRadius: 'var(--radius-sm)', padding: '10px 14px' }}>
               <div style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--color-on-surface-variant)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 3 }}>{l}</div>
@@ -191,7 +191,7 @@ export default function AdvisorsPage() {
                       </td>
                       <td style={{ fontSize: 12.5, color: 'var(--color-on-surface-variant)' }}>
                         {a.invite_by_advisor_id && a.invite_by_advisor_id !== 'Directo' && a.invite_by_advisor_id !== ''
-                          ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Award size={11} />{a.invite_by_advisor_id}</span>
+                          ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Award size={11} />{a.inviterName || a.invite_by_advisor_id}</span>
                           : '—'}
                       </td>
                       <td style={{ minWidth: 160 }}>
