@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/header';
 import { useAuthStore } from '@/store/auth.store';
 import {
@@ -444,7 +444,16 @@ export default function GuiaPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const role = (user?.role ?? '') as Role;
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
   const [category, setCategory] = useState<Category>('inicio');
+
+  // Sincroniza la pestaña con ?tab= (soft-navigation no re-monta el componente)
+  useEffect(() => {
+    if (tabParam && (['inicio', 'guias', 'faq', 'glosario'] as const).includes(tabParam as Category)) {
+      setCategory(tabParam as Category);
+    }
+  }, [tabParam]);
   const [query, setQuery] = useState('');
 
   const q = query.trim().toLowerCase();

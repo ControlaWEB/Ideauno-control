@@ -1,11 +1,12 @@
 'use client';
 
 // components/header.tsx
-import { Search, Bell, HelpCircle } from 'lucide-react';
+import { Search, HelpCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { getInitials } from '@/lib/utils';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { NotificationsBell } from './notifications-bell';
 
 interface HeaderProps {
   title?: string;
@@ -49,19 +50,17 @@ export function Header({ title, subtitle }: HeaderProps) {
 
       {/* Actions */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8 }}>
-        <div className="tooltip-wrapper">
-          <button className="btn-ghost" style={{ padding: 8, borderRadius: '50%', position: 'relative' }}>
-            <Bell size={18} />
-            <span className="notif-dot" />
-          </button>
-          <span className="tooltip">Notificaciones</span>
-        </div>
+        <NotificationsBell />
 
         <div className="tooltip-wrapper">
-          <button className="btn-ghost" style={{ padding: 8, borderRadius: '50%' }}>
+          <button
+            className="btn-ghost"
+            style={{ padding: 8, borderRadius: '50%' }}
+            onClick={() => router.push('/guia?tab=faq')}
+          >
             <HelpCircle size={18} />
           </button>
-          <span className="tooltip">Ayuda</span>
+          <span className="tooltip">Preguntas frecuentes</span>
         </div>
 
         {user && (

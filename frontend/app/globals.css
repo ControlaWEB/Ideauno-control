@@ -921,6 +921,12 @@ tbody td {
   opacity: 1;
 }
 
+/* En el topbar el tooltip cae debajo (arriba se corta fuera del viewport) */
+.topbar .tooltip {
+  bottom: auto;
+  top: calc(100% + 6px);
+}
+
 /* ===================== COMMISSION SPLIT BAR ===================== */
 .split-bar {
   height: 8px;
