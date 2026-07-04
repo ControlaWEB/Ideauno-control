@@ -16,6 +16,7 @@ import { ComisionPorMesChart } from './charts/comision-por-mes-chart';
 import { OperacionesPorTipoChart } from './charts/operaciones-por-tipo-chart';
 import { DistribucionComisionesChart } from './charts/distribucion-comisiones-chart';
 import { PropiedadesPorEstatusChart } from './charts/propiedades-por-estatus-chart';
+import { AvanceAmaChart } from './charts/avance-ama-chart';
 
 type TabId = 'cierres' | 'comisiones' | 'propiedades' | 'pagos' | 'cumpleanos';
 
@@ -167,6 +168,17 @@ export function AdminDashboard() {
             <div className="card-header"><div className="card-title">Distribución de comisiones</div></div>
             {loading ? <div className="skeleton" style={{ height: 240, borderRadius: 'var(--radius-md)' }} /> : <DistribucionComisionesChart data={ch.distribucionComisiones ?? null} />}
           </div>
+        </div>
+
+        {/* ─── Avance AMA por asesor ─── */}
+        <div className="card" style={{ marginBottom: 20 }}>
+          <div className="card-header">
+            <div>
+              <div className="card-title">Avance AMA por asesor</div>
+              <div className="card-subtitle">Meta anual de comisiones netas — verde: meta alcanzada</div>
+            </div>
+          </div>
+          {loading ? <div className="skeleton" style={{ height: 300, borderRadius: 'var(--radius-md)' }} /> : <AvanceAmaChart data={amaAsesores} />}
         </div>
 
         {/* ─── Rankings ─── */}
