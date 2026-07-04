@@ -27,6 +27,29 @@ export function formatDate(dateStr: string | null | undefined): string {
   }).format(d);
 }
 
+export function formatCompactCurrency(amount: number | null | undefined): string {
+  const n = Number(amount) || 0;
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+  return formatCurrency(n);
+}
+
+export function formatMonthLabel(monthStr: string | null | undefined): string {
+  if (!monthStr) return '—';
+  const [year, month] = monthStr.split('-');
+  const d = new Date(Number(year), Number(month) - 1, 1);
+  if (Number.isNaN(d.getTime())) return monthStr;
+  return new Intl.DateTimeFormat('es-MX', { month: 'short', year: '2-digit' }).format(d);
+}
+
+export function formatNumber(value: number | null | undefined): string {
+  return new Intl.NumberFormat('es-MX').format(Number(value) || 0);
+}
+
+export function formatPercent(value: number | null | undefined, decimals = 1): string {
+  return `${(Number(value) || 0).toFixed(decimals)}%`;
+}
+
 export function getInitials(name: string | null | undefined): string {
   return (name ?? '')
     .split(' ')

@@ -19,6 +19,7 @@ import {
   ShieldCheck,
   History,
   FolderOpen,
+  BookOpen,
 } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { getInitials } from '@/lib/utils';
@@ -32,6 +33,7 @@ type NavLink = { label: string; href: string; icon: React.ElementType; roles?: s
 
 const NAV_PRINCIPAL: NavLink[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Guía de Uso', href: '/guia', icon: BookOpen },
 ];
 
 const NAV_CAPTACION: NavLink[] = [

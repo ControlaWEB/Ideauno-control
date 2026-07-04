@@ -1,0 +1,24 @@
+CARPETA DE DEMOSTRACIÓN Y CAPACITACIÓN — Idea Uno Control
+==========================================================
+
+Contenido:
+
+1. Guion-Demostracion-Capacitacion-IdeaUno.pdf
+   - Documento principal (8 páginas). Sirve como guión paso a paso para
+     presentar la plataforma Y como manual de capacitación de uso.
+   - Incluye: roles, el flujo completo, 12 escenas de demostración
+     (qué mostrar / qué decir / qué dato usar), glosario de estados,
+     preguntas frecuentes, checklist previo y cómo limpiar los datos demo.
+
+2. documentos-para-subir/
+   - PDFs vacíos de ejemplo para subir en los formularios durante la demo
+     (identificación, comprobante de domicilio, RFC, contrato de comisión,
+     predial, escrituras, avalúo, estado de cuenta).
+   - No contienen información real; son solo para probar las cargas.
+
+Cómo usarlo:
+   - Abre el PDF principal y síguelo escena por escena.
+   - Cuando un formulario pida un documento, sube el archivo correspondiente
+     de la carpeta "documentos-para-subir".
+   - Al terminar la demo, corre docs/cleanup-demo-data.sql para borrar los
+     datos de ejemplo (todos llevan el prefijo DEMO-).

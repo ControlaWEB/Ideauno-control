@@ -99,9 +99,24 @@ export class AdvisorsService {
         { advId: adv.id },
       ),
       this.databaseService.query<any>(
-        `SELECT monto_acumulado, meta_ama, avance_pct, ama_alcanzada, estatus_ama
-         FROM public.fact_ama_asesor WHERE id_asesor = @advId AND estatus_ama != 'Reiniciado'
-         ORDER BY created_at DESC LIMIT 1`,
+        // AMA calculada EN VIVO (periodo vigente + acumulado real de comisiones)
+        `SELECT fa.meta_ama, fa.estatus_ama, fa.fecha_inicio_periodo, fa.fecha_fin_periodo,
+                COALESCE(acc.acumulado, 0) AS monto_acumulado,
+                CASE WHEN fa.meta_ama > 0
+                     THEN ROUND((COALESCE(acc.acumulado, 0) / fa.meta_ama) * 100, 2)
+                     ELSE 0 END AS avance_pct,
+                (fa.meta_ama > 0 AND COALESCE(acc.acumulado, 0) >= fa.meta_ama) AS ama_alcanzada
+         FROM public.fact_ama_asesor fa
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+           FROM public.commissions c
+           JOIN public.operations o ON o.id = c.operation_id
+           WHERE c.advisor_id = @advId AND c.type = 'cierre' AND o.status <> 'Cancelado'
+             AND (fa.fecha_inicio_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre >= fa.fecha_inicio_periodo)
+             AND (fa.fecha_fin_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre <= fa.fecha_fin_periodo)
+         ) acc ON true
+         WHERE fa.id_asesor = @advId AND fa.estatus_ama <> 'Reiniciado'
+         ORDER BY fa.created_at DESC LIMIT 1`,
         { advId: adv.id },
       ),
     ]);

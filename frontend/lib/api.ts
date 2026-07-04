@@ -57,9 +57,21 @@ export const authApi = {
 };
 
 // DASHBOARD
+export interface DashboardFilters {
+  fechaInicio?: string;
+  fechaFin?: string;
+  idAsesor?: string;
+  tipoOperacion?: string;
+  estatusCierre?: string;
+}
+
 export const dashboardApi = {
-  getKpis: () => api.get('/dashboard/kpis'),
-  getCharts: () => api.get('/dashboard/charts'),
+  getKpis: (params?: DashboardFilters) => api.get('/dashboard/kpis', { params }),
+  getCharts: (params?: DashboardFilters) => api.get('/dashboard/charts', { params }),
+  getComisionPorMes: (params?: DashboardFilters) =>
+    api.get('/dashboard/comision-por-mes', { params }),
+  getAdvisorStats: (advisorId?: string) =>
+    api.get('/dashboard/advisor', { params: advisorId ? { advisorId } : undefined }),
   getConfig: () => api.get('/dashboard/config'),
   updateConfig: (id: string, valorNumerico: number, actualizadoPor?: string) =>
     api.patch(`/dashboard/config/${id}`, { valorNumerico, actualizadoPor }),

@@ -238,7 +238,9 @@ export class OperationsService {
       ama.meta_ama > 0
         ? parseFloat(((nuevoAcumulado / ama.meta_ama) * 100).toFixed(2))
         : 0;
-    const nuevoAlcanzada = nuevoAcumulado >= ama.meta_ama;
+    // Guardia: sin meta (meta_ama <= 0) nunca se marca como alcanzada,
+    // para no dar 100% de comisión por una meta mal configurada.
+    const nuevoAlcanzada = ama.meta_ama > 0 && nuevoAcumulado >= ama.meta_ama;
     let nuevoEstatus = 'En progreso';
     if (nuevoAlcanzada) nuevoEstatus = 'AMA alcanzada';
     else if (nuevoPct >= 80) nuevoEstatus = '80% alcanzado';

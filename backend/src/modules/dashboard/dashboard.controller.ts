@@ -4,6 +4,7 @@ import {
   Patch,
   Param,
   Body,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -36,27 +37,54 @@ class UpdateConfigDto {
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) actualizadoPor?: string;
 }
 
+class DashboardFiltersQuery {
+  @IsOptional() @IsString() @MaxLength(20) fechaInicio?: string;
+  @IsOptional() @IsString() @MaxLength(20) fechaFin?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) idAsesor?: string;
+  @IsOptional() @IsString() @MaxLength(30) tipoOperacion?: string;
+  @IsOptional() @IsString() @MaxLength(60) estatusCierre?: string;
+}
+
 @Controller('dashboard')
 @UseGuards(JwtAuthGuard)
 export class DashboardController {
   constructor(private dashboardService: DashboardService) {}
 
   @Get('advisor')
-  getAdvisorStats(@Request() req: any) {
+  getAdvisorStats(@Request() req: any, @Query('advisorId') advisorId?: string) {
+    const canViewOthers =
+      req.user.role === UserRole.ADMIN ||
+      req.user.role === UserRole.SUPER_ADMIN;
+    if (advisorId && canViewOthers) {
+      return this.dashboardService.getAdvisorStatsByAdvisorId(advisorId);
+    }
     return this.dashboardService.getAdvisorStats(req.user.id);
   }
 
   @Get('kpis')
-  getKpis() {
-    return this.dashboardService.getKpis();
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  getKpis(@Query() filters: DashboardFiltersQuery) {
+    return this.dashboardService.getKpis(filters);
   }
 
   @Get('charts')
-  getCharts() {
-    return this.dashboardService.getCharts();
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  getCharts(@Query() filters: DashboardFiltersQuery) {
+    return this.dashboardService.getCharts(filters);
+  }
+
+  @Get('comision-por-mes')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  getComisionPorMes(@Query() filters: DashboardFiltersQuery) {
+    return this.dashboardService.getComisionPorMes(filters);
   }
 
   @Get('config')
+  @UseGuards(RolesGuard)
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   getConfig() {
     return this.dashboardService.getConfig();
   }

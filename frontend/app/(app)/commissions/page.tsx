@@ -63,8 +63,10 @@ export default function CommissionsPage() {
   const totalLiberadas = commissions
     .filter(c => ['Liberada', 'Pagada'].includes(c.estatus_comision))
     .reduce((a, b) => a + Number(b.monto_neto_asesor || b.amount || 0), 0);
+  // Ingreso realizado: solo comisiones liberadas/pagadas (igual que el KPI del Dashboard).
+  // No incluye Bloqueadas ni Calculadas, que aún no son ingreso.
   const totalInmob = commissions
-    .filter(c => c.type === 'cierre')
+    .filter(c => c.type === 'cierre' && ['Liberada', 'Pagada'].includes(c.estatus_comision))
     .reduce((a, b) => a + Number(b.monto_inmobiliaria || 0), 0);
 
   const notify = (msg: string, ok = true) => {

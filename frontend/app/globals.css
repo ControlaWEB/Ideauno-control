@@ -709,15 +709,17 @@ tbody td {
 }
 
 /* ===================== GRID HELPERS ===================== */
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
 
 @media (max-width: 1280px) {
+  .grid-5 { grid-template-columns: repeat(3, 1fr); }
   .grid-4 { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 768px) {
-  .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+  .grid-5, .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
   .sidebar { width: 60px; }
   .main-layout { margin-left: 60px; }
 }
