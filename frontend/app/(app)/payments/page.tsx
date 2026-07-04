@@ -220,7 +220,7 @@ export default function PaymentsPage() {
                     </thead>
                     <tbody>
                       {payments.map((p: any) => {
-                        const st = STATUS_STYLE[p.estatus ?? p.status] ?? { label: p.estatus ?? p.status ?? '—', cls: 'badge-neutral' };
+                        const st = STATUS_STYLE[p.estatus_pago ?? p.estatus ?? p.status] ?? { label: p.estatus_pago ?? p.estatus ?? p.status ?? '—', cls: 'badge-neutral' };
                         return (
                           <tr key={p.id}>
                             <td style={{ fontSize: 13 }}>{formatDate(p.fecha_solicitud ?? p.created_at)}</td>
@@ -271,8 +271,8 @@ export default function PaymentsPage() {
                   </thead>
                   <tbody>
                     {payments.map((p: any) => {
-                      const st          = STATUS_STYLE[p.estatus ?? p.status] ?? { label: p.estatus ?? p.status ?? '—', cls: 'badge-neutral' };
-                      const estatus     = p.estatus ?? p.status ?? '';
+                      const st          = STATUS_STYLE[p.estatus_pago ?? p.estatus ?? p.status] ?? { label: p.estatus_pago ?? p.estatus ?? p.status ?? '—', cls: 'badge-neutral' };
+                      const estatus     = p.estatus_pago ?? p.estatus ?? p.status ?? '';
                       const isSolicitado = estatus === 'Solicitado';
                       const isAutorizado = ['Autorizado', 'Validado'].includes(estatus);
                       const paidFormOpen = !!paidForms[p.id];
@@ -318,7 +318,10 @@ export default function PaymentsPage() {
                                   style={{ fontSize: 11.5, padding: '4px 10px' }}
                                   onClick={() => setPaidForms(prev => ({
                                     ...prev,
-                                    [p.id]: { formaPago: '', montoPagado: '' },
+                                    [p.id]: {
+                                      formaPago: p.forma_pago ?? '',
+                                      montoPagado: String(p.monto_solicitado ?? p.amount ?? ''),
+                                    },
                                   }))}
                                 >
                                   Marcar Pagado

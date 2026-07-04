@@ -28,6 +28,7 @@ interface FeedItem {
   Icon: typeof Bell;
   color: string;
   ts: number;
+  href?: string;
 }
 
 // ── Iconos/colores por tipo (compartido entre audit y notificaciones) ──
@@ -64,28 +65,54 @@ interface AuditEntry {
 }
 function auditText(e: AuditEntry): string {
   const d = e.details ?? {};
+  // Nombre del asesor / código de operación involucrado (para "para quién").
+  const who = (d.advisorName as string) || '';
+  const code = (d.operationCode as string) || (d.operationId as string) || '';
+  const w = who ? ` · ${who}` : '';
+
   switch (e.action) {
-    case 'CREATE_ADVISOR': return `Alta de asesor: ${d.name ?? ''}`;
-    case 'UPDATE_ADVISOR_STATUS': return `Estatus de asesor → ${d.newStatus ?? ''}`;
-    case 'UPDATE_ADVISOR_BANK': return 'Datos bancarios de asesor actualizados';
-    case 'UPDATE_ADVISOR': return 'Asesor editado';
-    case 'CREATE_OPERATION': return `Nueva operación (${d.type ?? ''}) · comisión ${money(d.montoComision)}`;
-    case 'RELEASE_COMMISSION': return 'Comisión liberada';
-    case 'BLOCK_COMMISSION': return `Comisión bloqueada${d.motivo ? `: ${d.motivo}` : ''}`;
-    case 'UNBLOCK_COMMISSION': return 'Comisión desbloqueada';
-    case 'CANCEL_OPERATION': return `Operación cancelada${d.motivo ? `: ${d.motivo}` : ''}`;
-    case 'UPDATE_OPERATION_STATUS': return `Estatus de operación → ${d.newStatus ?? ''}`;
-    case 'AUTHORIZE_PAYMENT': return 'Pago autorizado';
-    case 'MARK_PAYMENT_PAID': return `Pago realizado (${d.formaPago ?? ''}) · ${money(d.monto)}`;
-    case 'REJECT_PAYMENT': return `Pago rechazado${d.observaciones ? `: ${d.observaciones}` : ''}`;
+    case 'CREATE_ADVISOR': return `Alta de asesor: ${d.name ?? who ?? ''}`;
+    case 'UPDATE_ADVISOR_STATUS': return `Estatus de asesor${w} → ${d.newStatus ?? ''}`;
+    case 'UPDATE_ADVISOR_BANK': return `Datos bancarios actualizados${w}`;
+    case 'UPDATE_ADVISOR': return `Asesor editado${w}`;
+    case 'CREATE_OPERATION': return `Nueva operación (${d.type ?? ''})${w} · comisión ${money(d.montoComision)}`;
+    case 'RELEASE_COMMISSION': return `Comisión liberada${w}`;
+    case 'BLOCK_COMMISSION': return `Comisión bloqueada${w}${d.motivo ? ` — ${d.motivo}` : ''}`;
+    case 'UNBLOCK_COMMISSION': return `Comisión desbloqueada${w}`;
+    case 'CANCEL_OPERATION': return `Operación cancelada${code ? ` ${code}` : ''}${w}${d.motivo ? ` — ${d.motivo}` : ''}`;
+    case 'UPDATE_OPERATION_STATUS': return `Estatus de operación${code ? ` ${code}` : ''}${w} → ${d.newStatus ?? ''}`;
+    case 'AUTHORIZE_PAYMENT': return `Pago autorizado${w}`;
+    case 'MARK_PAYMENT_PAID': return `Pago realizado (${d.formaPago ?? ''})${w} · ${money(d.monto)}`;
+    case 'REJECT_PAYMENT': return `Pago rechazado${w}${d.observaciones ? ` — ${d.observaciones}` : ''}`;
     default: return e.action;
   }
+}
+
+// ── Ruta de destino al hacer clic (vista admin/audit) ──
+function auditHref(action: string, d: Record<string, unknown>): string | undefined {
+  const advisorId = d.advisorId as string | undefined;
+  const operationId = d.operationId as string | undefined;
+  if (action.includes('ADVISOR') && advisorId) return `/advisors/${advisorId}`;
+  if (['CREATE_OPERATION', 'CANCEL_OPERATION', 'UPDATE_OPERATION_STATUS'].includes(action) && operationId) {
+    return `/operations/${operationId}`;
+  }
+  if (action.includes('COMMISSION')) return '/commissions';
+  if (action.includes('PAYMENT')) return '/payments';
+  return undefined;
+}
+
+// ── Ruta de destino para notificaciones de asesor ──
+function notifHref(type: string, entityId?: string): string | undefined {
+  if (type.startsWith('OPERATION') && entityId) return `/operations/${entityId}`;
+  if (type.startsWith('COMMISSION')) return '/commissions';
+  if (type.startsWith('PAYMENT')) return '/payments';
+  return undefined;
 }
 
 // ── Notificación de asesor ──
 interface AdvisorNotification {
   id: string; type: string; title: string; body: string;
-  read: boolean; created_at: string;
+  read: boolean; created_at: string; entity_id?: string;
 }
 
 function relativeTime(iso: string): string {
@@ -144,13 +171,13 @@ export function NotificationsBell() {
       return (auditQuery.data?.data ?? []).map((e) => {
         const { Icon, color } = styleOf(e.action);
         const actor = e.user_email && e.user_email !== 'system' ? `${e.user_email} · ` : '';
-        return { id: e.id, text: auditText(e), sub: `${actor}${relativeTime(e.timestamp)}`, Icon, color, ts: new Date(e.timestamp).getTime() };
+        return { id: e.id, text: auditText(e), sub: `${actor}${relativeTime(e.timestamp)}`, Icon, color, ts: new Date(e.timestamp).getTime(), href: auditHref(e.action, e.details ?? {}) };
       });
     }
     if (isAsesor) {
       return (notifQuery.data?.data ?? []).map((n) => {
         const { Icon, color } = styleOf(n.type);
-        return { id: n.id, text: n.title, sub: `${n.body ? `${n.body} · ` : ''}${relativeTime(n.created_at)}`, Icon, color, ts: new Date(n.created_at).getTime() };
+        return { id: n.id, text: n.title, sub: `${n.body ? `${n.body} · ` : ''}${relativeTime(n.created_at)}`, Icon, color, ts: new Date(n.created_at).getTime(), href: notifHref(n.type, n.entity_id) };
       });
     }
     return [];
@@ -238,13 +265,19 @@ export function NotificationsBell() {
             ) : (
               items.map((item) => {
                 const { Icon } = item;
+                const clickable = !!item.href;
                 return (
                   <div
                     key={item.id}
+                    onClick={clickable ? () => { setOpen(false); router.push(item.href!); } : undefined}
                     style={{
                       display: 'flex', gap: 10, padding: '11px 16px', alignItems: 'flex-start',
                       borderBottom: '1px solid var(--color-outline-variant)',
+                      cursor: clickable ? 'pointer' : 'default',
+                      transition: 'background 0.12s',
                     }}
+                    onMouseEnter={clickable ? (e) => { e.currentTarget.style.background = 'var(--color-surface-container-low)'; } : undefined}
+                    onMouseLeave={clickable ? (e) => { e.currentTarget.style.background = 'transparent'; } : undefined}
                   >
                     <div style={{ width: 30, height: 30, borderRadius: '50%', background: `${item.color}18`, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Icon size={15} />

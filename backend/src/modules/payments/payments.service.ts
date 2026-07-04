@@ -17,6 +17,17 @@ export class PaymentsService {
     private notificationsService: NotificationsService,
   ) {}
 
+  /** Nombre del asesor dueño del pago, para enriquecer logs de auditoría. */
+  private async getPaymentAdvisorName(paymentId: string): Promise<string> {
+    const [row] = await this.databaseService.query<any>(
+      `SELECT a.name FROM public.fact_pagos p
+       LEFT JOIN public.advisors a ON p.id_asesor = a.id
+       WHERE p.id = @id LIMIT 1`,
+      { id: paymentId },
+    );
+    return row?.name ?? '';
+  }
+
   private async notifyAdvisorOfPayment(
     paymentId: string,
     subject: string,
@@ -170,7 +181,7 @@ export class PaymentsService {
       action: 'AUTHORIZE_PAYMENT',
       userId: adminId,
       userEmail: 'system',
-      details: { paymentId: id },
+      details: { paymentId: id, advisorName: await this.getPaymentAdvisorName(id) },
     });
     await this.notifyAdvisorOfPayment(
       id,
@@ -218,7 +229,7 @@ export class PaymentsService {
       action: 'MARK_PAYMENT_PAID',
       userId: adminId,
       userEmail: 'system',
-      details: { paymentId: id, formaPago, monto },
+      details: { paymentId: id, formaPago, monto, advisorName: await this.getPaymentAdvisorName(id) },
     });
     await this.notifyAdvisorOfPayment(
       id,
@@ -247,7 +258,7 @@ export class PaymentsService {
       action: 'REJECT_PAYMENT',
       userId: adminId,
       userEmail: 'system',
-      details: { paymentId: id, observaciones },
+      details: { paymentId: id, observaciones, advisorName: await this.getPaymentAdvisorName(id) },
     });
     await this.notifyAdvisorOfPayment(
       id,

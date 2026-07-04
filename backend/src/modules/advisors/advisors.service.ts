@@ -282,7 +282,7 @@ export class AdvisorsService {
       action: 'UPDATE_ADVISOR_STATUS',
       userId: 'system',
       userEmail: 'system',
-      details: { advisorId: id, newStatus: dto.status },
+      details: { advisorId: id, newStatus: dto.status, advisorName: advisor.name },
     });
 
     if (dto.status === 'Fallecido' && !advisor.nombre_beneficiario) {
@@ -313,7 +313,7 @@ export class AdvisorsService {
     id: string,
     dto: { clabe_interbancaria: string; banco: string; titular_cuenta: string },
   ) {
-    await this.findOne(id);
+    const advisor = await this.findOne(id);
     await this.databaseService.query(
       `UPDATE public.advisors
        SET clabe_interbancaria = @clabe,
@@ -332,7 +332,7 @@ export class AdvisorsService {
       action: 'UPDATE_ADVISOR_BANK',
       userId: 'system',
       userEmail: 'system',
-      details: { advisorId: id },
+      details: { advisorId: id, advisorName: advisor.name },
     });
     return this.findOne(id);
   }
@@ -356,7 +356,7 @@ export class AdvisorsService {
   };
 
   async update(id: string, dto: Partial<any>) {
-    await this.findOne(id);
+    const advisor = await this.findOne(id);
 
     const fields = Object.keys(dto).filter(
       (f) =>
@@ -378,7 +378,7 @@ export class AdvisorsService {
       action: 'UPDATE_ADVISOR',
       userId: 'system',
       userEmail: 'system',
-      details: { advisorId: id },
+      details: { advisorId: id, advisorName: advisor.name },
     });
 
     return this.findOne(id);

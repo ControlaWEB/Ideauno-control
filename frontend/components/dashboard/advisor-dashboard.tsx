@@ -107,19 +107,6 @@ export function AdvisorDashboard({ advisorId, advisorName, viewingAsAdmin, heade
                   {adv.specialty && <span>🏷 {adv.specialty}</span>}
                 </div>
               </div>
-              <div style={{ width: 260, flexShrink: 0 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Avance AMA</span>
-                  <span style={{ fontWeight: 700, color: amaAlcanzada ? 'var(--color-success)' : 'var(--color-primary)' }}>{amaPct.toFixed(1)}%</span>
-                </div>
-                <div style={{ width: '100%', height: 8, background: 'var(--color-secondary)', borderRadius: 4, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${Math.min(100, amaPct)}%`, background: amaAlcanzada ? 'var(--color-success)' : 'var(--color-primary)', borderRadius: 4, transition: 'width 0.4s' }} />
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 5 }}>
-                  <span>{formatCurrency(Number(ama?.monto_acumulado || 0))}</span>
-                  <span>Meta: {formatCurrency(Number(ama?.meta_ama || 180000))}</span>
-                </div>
-              </div>
             </div>
           </div>
         )}

@@ -19,6 +19,16 @@ export class OperationsService {
 
   /* ─── Helpers ─── */
 
+  /** Nombre del asesor para enriquecer logs de auditoría ("para quién"). */
+  private async getAdvisorName(advisorId?: string): Promise<string> {
+    if (!advisorId) return '';
+    const [row] = await this.databaseService.query<any>(
+      `SELECT name FROM public.advisors WHERE id = @id LIMIT 1`,
+      { id: advisorId },
+    );
+    return row?.name ?? '';
+  }
+
   private async notifyAdvisor(
     advisorId: string,
     subject: string,
@@ -443,7 +453,13 @@ export class OperationsService {
       action: 'CREATE_OPERATION',
       userId: 'system',
       userEmail: 'system',
-      details: { operationId: id, type: tipoOp, montoComision },
+      details: {
+        operationId: id,
+        operationCode: code,
+        type: tipoOp,
+        montoComision,
+        advisorName: await this.getAdvisorName(advisorId),
+      },
     });
 
     if (advisorId) {
@@ -560,7 +576,7 @@ export class OperationsService {
       action: 'RELEASE_COMMISSION',
       userId,
       userEmail: 'system',
-      details: { commissionId },
+      details: { commissionId, advisorName: await this.getAdvisorName(comm.advisor_id) },
     });
     await this.notifyAdvisor(
       comm.advisor_id,
@@ -599,7 +615,7 @@ export class OperationsService {
       action: 'BLOCK_COMMISSION',
       userId,
       userEmail: 'system',
-      details: { commissionId, motivo },
+      details: { commissionId, motivo, advisorName: await this.getAdvisorName(rows[0].advisor_id) },
     });
     await this.notifyAdvisor(
       rows[0].advisor_id,
@@ -637,7 +653,7 @@ export class OperationsService {
       action: 'UNBLOCK_COMMISSION',
       userId,
       userEmail: 'system',
-      details: { commissionId },
+      details: { commissionId, advisorName: await this.getAdvisorName(rows[0].advisor_id) },
     });
     await this.notifyAdvisor(
       rows[0].advisor_id,
@@ -708,7 +724,12 @@ export class OperationsService {
       action: 'CANCEL_OPERATION',
       userId: adminId,
       userEmail: 'system',
-      details: { operationId: id, motivo },
+      details: {
+        operationId: id,
+        operationCode: op.code,
+        motivo,
+        advisorName: await this.getAdvisorName(commRows[0]?.advisor_id),
+      },
     });
 
     if (commRows.length) {
@@ -763,11 +784,23 @@ export class OperationsService {
         { id, today: new Date().toISOString().split('T')[0] },
       );
     }
+    const [opMeta] = await this.databaseService.query<any>(
+      `SELECT o.code, c.advisor_id
+       FROM public.operations o
+       LEFT JOIN public.commissions c ON c.operation_id = o.id AND c.type = 'cierre'
+       WHERE o.id = @id LIMIT 1`,
+      { id },
+    );
     await this.auditService.log({
       action: 'UPDATE_OPERATION_STATUS',
       userId: adminId ?? 'system',
       userEmail: 'system',
-      details: { operationId: id, newStatus: status },
+      details: {
+        operationId: id,
+        operationCode: opMeta?.code,
+        newStatus: status,
+        advisorName: await this.getAdvisorName(opMeta?.advisor_id),
+      },
     });
 
     return this.findOne(id);
