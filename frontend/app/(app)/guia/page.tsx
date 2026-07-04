@@ -247,6 +247,12 @@ const FAQS: Faq[] = [
     keywords: 'alta asesor quien permiso admin crear',
   },
   {
+    q: '¿Cómo cambio el estatus de una propiedad (venta / renta)?',
+    a: 'Entra a Propiedades en Venta (o Propiedades en Renta), abre la ficha de la propiedad con el ícono del ojo, y en la sección “Cambiar Estatus” elige el nuevo estado (Incompleta, En revisión, Activa, Publicable, Compartible, Vendida/Rentada) y presiona “Cambiar Estatus”. El cambio se guarda al instante.',
+    href: '/properties', linkLabel: 'Ir a Propiedades',
+    keywords: 'cambiar estatus estado propiedad venta renta publicable activa compartible vendida rentada inventario ficha',
+  },
+  {
     q: '¿Cuál es el flujo completo de una operación?',
     a: 'Captación de la propiedad → registro del Cierre → el motor genera la Comisión (Calculada) → un admin la Libera (o Bloquea) → el asesor solicita el Pago → administración lo autoriza y lo marca como Pagado.',
     keywords: 'flujo completo proceso captacion cierre comision pago',
