@@ -536,6 +536,7 @@ export class DashboardService {
       asesoresInvitadosRows,
       ultimasOpsRows,
       pagosMentoriaRows,
+      advisorRows,
     ] = await Promise.all([
       this.databaseService.query<any>(
         `SELECT COUNT(*) as c FROM public.operations WHERE advisor_id = @advisorId AND fecha_cierre >= @monthStart AND fecha_cierre < @monthEnd`,
@@ -609,6 +610,12 @@ export class DashboardService {
          WHERE a.id_mentor = @advisorId`,
         { advisorId },
       ),
+      // Perfil del asesor (para el encabezado de Mi Dashboard)
+      this.databaseService.query<any>(
+        `SELECT id, name, email, phone, status, url_foto, specialty
+         FROM public.advisors WHERE id = @advisorId LIMIT 1`,
+        { advisorId },
+      ),
     ]);
 
     return {
@@ -623,6 +630,7 @@ export class DashboardService {
       asesoresInvitados: Number(asesoresInvitadosRows[0]?.c || 0),
       ultimasCuatroOps: ultimasOpsRows,
       pagosMentoria: Number(pagosMentoriaRows[0]?.t || 0),
+      advisor: advisorRows[0] ?? null,
     };
   }
 

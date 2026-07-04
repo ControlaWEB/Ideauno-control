@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { dashboardApi } from '@/lib/api';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, getInitials } from '@/lib/utils';
 import {
   Building2, FileText, DollarSign, TrendingUp, CheckCircle2, ArrowRight, Users,
 } from 'lucide-react';
@@ -64,6 +64,13 @@ export function AdvisorDashboard({ advisorId, advisorName, viewingAsAdmin, heade
   const amaPct = Number(ama?.avance_pct || 0);
   const amaAlcanzada = ama?.ama_alcanzada === true || ama?.ama_alcanzada === 'true';
   const ops: any[] = s.ultimasCuatroOps ?? [];
+  const adv = s.advisor ?? null;
+  const statusBadge: Record<string, string> = {
+    Activo: 'badge-success',
+    'En mentoría': 'badge-warning',
+    Inactivo: 'badge-neutral',
+    'Baja definitiva': 'badge-error',
+  };
 
   return (
       <div className="page-content animate-fade-in">
@@ -76,6 +83,46 @@ export function AdvisorDashboard({ advisorId, advisorName, viewingAsAdmin, heade
           </div>
           {headerExtra}
         </div>
+
+        {/* ─── Encabezado de perfil del asesor ─── */}
+        {adv && (
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center' }}>
+              <div className="avatar" style={{ width: 56, height: 56, fontSize: 18, flexShrink: 0 }}>
+                {getInitials(adv.name)}
+              </div>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 6 }}>
+                  <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--color-on-surface)' }}>{adv.name}</span>
+                  {adv.status && <span className={`badge ${statusBadge[adv.status] ?? 'badge-neutral'}`}>{adv.status}</span>}
+                  {amaAlcanzada && (
+                    <span className="badge" style={{ background: 'var(--color-secondary)', color: 'var(--color-primary)', fontWeight: 700 }}>
+                      🏆 AMA Alcanzada
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: 'flex', gap: 18, flexWrap: 'wrap', fontSize: 12.5, color: 'var(--color-on-surface-variant)' }}>
+                  {adv.email && <span>✉ {adv.email}</span>}
+                  {adv.phone && <span>📞 {adv.phone}</span>}
+                  {adv.specialty && <span>🏷 {adv.specialty}</span>}
+                </div>
+              </div>
+              <div style={{ width: 260, flexShrink: 0 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 5 }}>
+                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Avance AMA</span>
+                  <span style={{ fontWeight: 700, color: amaAlcanzada ? 'var(--color-success)' : 'var(--color-primary)' }}>{amaPct.toFixed(1)}%</span>
+                </div>
+                <div style={{ width: '100%', height: 8, background: 'var(--color-secondary)', borderRadius: 4, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${Math.min(100, amaPct)}%`, background: amaAlcanzada ? 'var(--color-success)' : 'var(--color-primary)', borderRadius: 4, transition: 'width 0.4s' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 5 }}>
+                  <span>{formatCurrency(Number(ama?.monto_acumulado || 0))}</span>
+                  <span>Meta: {formatCurrency(Number(ama?.meta_ama || 180000))}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* ─── KPI Row 1: 4 cards ─── */}
         <div className="grid-4" style={{ marginBottom: 20 }}>
