@@ -1,7 +1,7 @@
 'use client';
 
 import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts';
-import { formatCompactCurrency } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 
 const COLORS = ['var(--color-primary)', 'var(--color-success)', 'var(--color-secondary)', 'var(--color-on-surface-variant)'];
 
@@ -36,7 +36,7 @@ export function DistribucionComisionesChart({ data }: { data: Distribucion | nul
             <Cell key={i} fill={COLORS[i % COLORS.length]} />
           ))}
         </Pie>
-        <Tooltip formatter={(v) => [formatCompactCurrency(Number(v)), '']} />
+        <Tooltip formatter={(v, n) => [formatCurrency(Number(v)), n]} />
         <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 11 }} />
       </PieChart>
     </ResponsiveContainer>
