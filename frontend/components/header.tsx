@@ -5,6 +5,7 @@ import { Search, Bell, HelpCircle } from 'lucide-react';
 import { useAuthStore } from '@/store/auth.store';
 import { getInitials } from '@/lib/utils';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 interface HeaderProps {
   title?: string;
@@ -14,6 +15,7 @@ interface HeaderProps {
 export function Header({ title, subtitle }: HeaderProps) {
   const { user } = useAuthStore();
   const [searchValue, setSearchValue] = useState('');
+  const router = useRouter();
 
   return (
     <header className="topbar">
