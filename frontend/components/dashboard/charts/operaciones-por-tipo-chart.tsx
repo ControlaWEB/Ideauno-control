@@ -4,6 +4,20 @@ import { Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recha
 
 const COLORS = ['var(--color-primary)', 'var(--color-success)'];
 
+// Etiqueta de % DENTRO de la dona para que nunca se corte en los bordes.
+function renderInsideLabel({ cx, cy, midAngle, innerRadius, outerRadius, percent }: any) {
+  if (!percent) return null;
+  const RAD = Math.PI / 180;
+  const r = innerRadius + (outerRadius - innerRadius) * 0.5;
+  const x = cx + r * Math.cos(-midAngle * RAD);
+  const y = cy + r * Math.sin(-midAngle * RAD);
+  return (
+    <text x={x} y={y} fill="#ffffff" fontSize={12} fontWeight={700} textAnchor="middle" dominantBaseline="central">
+      {`${(percent * 100).toFixed(0)}%`}
+    </text>
+  );
+}
+
 export function OperacionesPorTipoChart({ data }: { data: { type: string; c: number | string }[] }) {
   const ventas = Number(data.find((d) => d.type === 'Venta')?.c || 0);
   const rentas = Number(data.find((d) => d.type === 'Renta')?.c || 0);
@@ -28,11 +42,11 @@ export function OperacionesPorTipoChart({ data }: { data: { type: string; c: num
           data={chartData}
           cx="50%"
           cy="50%"
-          innerRadius={60}
-          outerRadius={90}
+          innerRadius={58}
+          outerRadius={88}
           paddingAngle={3}
           dataKey="value"
-          label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
+          label={renderInsideLabel}
           labelLine={false}
         >
           {chartData.map((_, i) => (
