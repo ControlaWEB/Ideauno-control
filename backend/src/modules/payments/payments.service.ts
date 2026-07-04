@@ -6,6 +6,7 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../notifications/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class PaymentsService {
@@ -13,21 +14,32 @@ export class PaymentsService {
     private databaseService: DatabaseService,
     private auditService: AuditService,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
   ) {}
 
   private async notifyAdvisorOfPayment(
     paymentId: string,
     subject: string,
     bodyHtml: string,
+    inApp?: { type: string; title: string; body: string },
   ) {
     const [row] = await this.databaseService.query<any>(
-      `SELECT a.email FROM public.fact_pagos p
+      `SELECT p.id_asesor, a.email FROM public.fact_pagos p
        LEFT JOIN public.advisors a ON p.id_asesor = a.id
        WHERE p.id = @id LIMIT 1`,
       { id: paymentId },
     );
     if (row?.email) {
       await this.emailService.send([row.email], subject, bodyHtml);
+    }
+    if (inApp && row?.id_asesor) {
+      await this.notificationsService.createForAdvisor({
+        advisorId: row.id_asesor,
+        type: inApp.type,
+        title: inApp.title,
+        body: inApp.body,
+        entityId: paymentId,
+      });
     }
   }
 
@@ -164,6 +176,11 @@ export class PaymentsService {
       id,
       `Pago autorizado: ${id}`,
       `<p>Tu pago <strong>${id}</strong> fue autorizado y está en proceso.</p>`,
+      {
+        type: 'PAYMENT_AUTHORIZED',
+        title: 'Pago autorizado',
+        body: `Tu pago ${id} fue autorizado y está en proceso.`,
+      },
     );
     return this.findOne(id);
   }
@@ -209,6 +226,11 @@ export class PaymentsService {
       `<p>Tu pago <strong>${id}</strong> fue procesado.</p>
        <p><strong>Monto:</strong> $${Number(monto).toLocaleString('es-MX')} MXN<br/>
        <strong>Forma de pago:</strong> ${formaPago}</p>`,
+      {
+        type: 'PAYMENT_PAID',
+        title: 'Pago realizado',
+        body: `Tu pago ${id} fue procesado por $${Number(monto).toLocaleString('es-MX')} MXN (${formaPago}).`,
+      },
     );
     return this.findOne(id);
   }
@@ -231,6 +253,11 @@ export class PaymentsService {
       id,
       `Pago rechazado: ${id}`,
       `<p>Tu solicitud de pago <strong>${id}</strong> fue rechazada.</p>${observaciones ? `<p><strong>Motivo:</strong> ${observaciones}</p>` : ''}`,
+      {
+        type: 'PAYMENT_REJECTED',
+        title: 'Pago rechazado',
+        body: `Tu solicitud de pago ${id} fue rechazada.${observaciones ? ` Motivo: ${observaciones}` : ''}`,
+      },
     );
     return this.findOne(id);
   }

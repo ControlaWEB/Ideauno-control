@@ -6,7 +6,8 @@ import { commissionsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
-import { DollarSign, Lock, Unlock, Search, TrendingUp, Calculator, CheckCircle2 } from 'lucide-react';
+import { DollarSign, Lock, Unlock, Search, TrendingUp, Calculator } from 'lucide-react';
+import { notify } from '@/lib/toast';
 
 const STATUS_MAP: Record<string, { label: string; class: string }> = {
   Calculada:              { label: 'Calculada',        class: 'badge-warning' },
@@ -36,7 +37,6 @@ export default function CommissionsPage() {
   const [loadingId, setLoadingId]     = useState<string | null>(null);
   const [blockingId, setBlockingId]   = useState<string | null>(null);
   const [blockMotivo, setBlockMotivo] = useState('');
-  const [toast, setToast]             = useState<{ msg: string; ok: boolean } | null>(null);
 
   const canAct = ACTION_ROLES.includes(user?.role ?? '');
 
@@ -69,36 +69,28 @@ export default function CommissionsPage() {
     .filter(c => c.type === 'cierre' && ['Liberada', 'Pagada'].includes(c.estatus_comision))
     .reduce((a, b) => a + Number(b.monto_inmobiliaria || 0), 0);
 
-  const notify = (msg: string, ok = true) => {
-    setToast({ msg, ok });
-    setTimeout(() => setToast(null), 4000);
-  };
-
+  // Los errores de API se muestran como toast flotante global (interceptor de axios).
   const handleRelease = async (id: string) => {
     setLoadingId(id);
     try {
       await commissionsApi.release(id);
       await queryClient.invalidateQueries({ queryKey: ['commissions'] });
-      notify('Comisión liberada correctamente');
-    } catch (e: any) {
-      notify(e?.response?.data?.message ?? 'Error al liberar comisión', false);
-    } finally {
+      notify.success('Comisión liberada correctamente');
+    } catch { /* toast global */ } finally {
       setLoadingId(null);
     }
   };
 
   const handleBlock = async (id: string) => {
-    if (!blockMotivo.trim()) { notify('Ingresa el motivo de bloqueo', false); return; }
+    if (!blockMotivo.trim()) { notify.error('Ingresa el motivo de bloqueo'); return; }
     setLoadingId(id);
     try {
       await commissionsApi.block(id, blockMotivo.trim());
       await queryClient.invalidateQueries({ queryKey: ['commissions'] });
       setBlockingId(null);
       setBlockMotivo('');
-      notify('Comisión bloqueada');
-    } catch (e: any) {
-      notify(e?.response?.data?.message ?? 'Error al bloquear comisión', false);
-    } finally {
+      notify.success('Comisión bloqueada');
+    } catch { /* toast global */ } finally {
       setLoadingId(null);
     }
   };
@@ -108,10 +100,8 @@ export default function CommissionsPage() {
     try {
       await commissionsApi.unblock(id);
       await queryClient.invalidateQueries({ queryKey: ['commissions'] });
-      notify('Comisión desbloqueada');
-    } catch (e: any) {
-      notify(e?.response?.data?.message ?? 'Error al desbloquear', false);
-    } finally {
+      notify.success('Comisión desbloqueada');
+    } catch { /* toast global */ } finally {
       setLoadingId(null);
     }
   };
@@ -126,20 +116,6 @@ export default function CommissionsPage() {
             <p className="page-desc">Calculadas automáticamente por el motor de comisiones — spec §9</p>
           </div>
         </div>
-
-        {toast && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: toast.ok ? '#f0fdf4' : '#fef2f2',
-            border: `1px solid ${toast.ok ? '#86efac' : '#fecaca'}`,
-            borderRadius: 'var(--radius-md)', padding: '10px 16px',
-            marginBottom: 16, fontSize: 13,
-            color: toast.ok ? '#166534' : '#b91c1c',
-          }}>
-            {toast.ok && <CheckCircle2 size={14} />}
-            {toast.msg}
-          </div>
-        )}
 
         <div className="grid-3" style={{ marginBottom: 20 }}>
           <div className="kpi-card" style={{ borderLeft: '3px solid var(--color-caution)' }}>

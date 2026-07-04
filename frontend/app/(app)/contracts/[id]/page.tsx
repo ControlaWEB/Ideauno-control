@@ -8,6 +8,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, FileText } from 'lucide-react';
+import { notify } from '@/lib/toast';
 
 const ADMIN_ROLES = ['Super Admin', 'Admin', 'Jurídico'];
 
@@ -146,8 +147,12 @@ export default function ContractDetailPage() {
 
   const handleViewDoc = async (docId: string) => {
     const res = await documentsApi.getSignedUrl(docId);
-    const url = res.data?.url ?? res.data;
-    if (url) window.open(url, '_blank');
+    const url = res.data?.signedUrl ?? res.data?.data?.signedUrl ?? res.data?.url;
+    if (typeof url === 'string' && url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      notify.error('No se pudo obtener el enlace del documento.');
+    }
   };
 
   // ── Loading ──────────────────────────────────────────────────────────────
@@ -561,7 +566,7 @@ export default function ContractDetailPage() {
                         {doc.fecha_carga ? formatDate(String(doc.fecha_carga)) : '—'}
                       </div>
                     </div>
-                    <DocStatusBadge status={String(doc.estatus ?? doc.status ?? 'Pendiente')} />
+                    <DocStatusBadge status={String(doc.estatus_documento ?? doc.estatus ?? doc.status ?? 'Pendiente')} />
                     <button
                       className="btn btn-secondary"
                       style={{ fontSize: 12, padding: '4px 10px', flexShrink: 0 }}

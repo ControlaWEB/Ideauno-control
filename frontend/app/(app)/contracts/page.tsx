@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import { ScrollText, Plus } from 'lucide-react';
+import { notify } from '@/lib/toast';
 import { useRouter } from 'next/navigation';
 
 const ESTATUS_STYLE: Record<string, { label: string; cls: string; color?: string }> = {
@@ -26,8 +27,6 @@ export default function ContractsPage() {
 
   const [statusEditMap, setStatusEditMap] = useState<Record<string, string>>({});
   const [savingMap, setSavingMap]         = useState<Record<string, boolean>>({});
-  const [errorMsg, setErrorMsg]           = useState<string | null>(null);
-  const [successMsg, setSuccessMsg]       = useState<string | null>(null);
 
   const canEdit = ['Super Admin', 'Admin', 'Jurídico'].includes(user?.role ?? '');
 
@@ -37,11 +36,9 @@ export default function ContractsPage() {
     refetchOnWindowFocus: true,
   });
 
-  const toast = (msg: string, isError = false) => {
-    if (isError) { setErrorMsg(msg); setSuccessMsg(null); }
-    else          { setSuccessMsg(msg); setErrorMsg(null); }
-    setTimeout(() => { setSuccessMsg(null); setErrorMsg(null); }, 4000);
-  };
+  // Toast flotante global. Los errores de API los muestra el interceptor de axios.
+  const toast = (msg: string, isError = false) =>
+    isError ? notify.error(msg) : notify.success(msg);
 
   const getStatusValue = (contract: any) =>
     statusEditMap[contract.id] ?? contract.estatus ?? contract.status ?? 'Pendiente';
@@ -54,9 +51,7 @@ export default function ContractsPage() {
       await api.patch(`/contracts/${id}/status`, { estatus: newStatus });
       await queryClient.invalidateQueries({ queryKey: ['contracts'] });
       toast('Estatus actualizado');
-    } catch {
-      toast('Error al actualizar el estatus', true);
-    } finally {
+    } catch { /* toast global */ } finally {
       setSavingMap(prev => ({ ...prev, [id]: false }));
     }
   };
@@ -86,17 +81,6 @@ export default function ContractsPage() {
             <Plus size={15} /> Nueva Solicitud
           </button>
         </div>
-
-        {successMsg && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)', padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#166534' }}>
-            {successMsg}
-          </div>
-        )}
-        {errorMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#b91c1c' }}>
-            {errorMsg}
-          </div>
-        )}
 
         {isLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

@@ -174,7 +174,22 @@ export default function PropertiesPage() {
                   return (
                     <tr key={p.id}>
                       <td>
-                        <div style={{ fontWeight: 550, fontSize: 13 }}>{p.address || '(Sin dirección)'}</div>
+                        <button
+                          type="button"
+                          onClick={() => router.push(`/properties/${p.id}`)}
+                          title="Ver detalle completo"
+                          style={{
+                            fontWeight: 550, fontSize: 13, color: 'var(--color-primary)',
+                            background: 'none', border: 'none', padding: 0, textAlign: 'left',
+                            cursor: 'pointer', userSelect: 'none', textDecoration: 'underline',
+                            textUnderlineOffset: 2, textDecorationColor: 'transparent',
+                            transition: 'text-decoration-color 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.textDecorationColor = 'currentColor'; }}
+                          onMouseLeave={e => { e.currentTarget.style.textDecorationColor = 'transparent'; }}
+                        >
+                          {p.address || '(Sin dirección)'}
+                        </button>
                         <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', display: 'flex', gap: 4, alignItems: 'center' }}>
                           <User size={10} />{p.owner_name || '—'}
                           {p.city && <span>· {p.city}</span>}

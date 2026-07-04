@@ -16,8 +16,9 @@ import { useHasAccess, AccessDenied } from '@/components/access-guard';
 import {
   zNombre, zNombreOpcional, zEmailOpcional, zTelefono, zRfcOpcional, zCurpOpcional,
   zFechaNoFutura, MAX_TEXTO_LARGO, MAX_MONTO, MAX_SUPERFICIE,
-  soloDigitos, getApiErrorMessage,
+  soloDigitos,
 } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 /* ─── Piezas numéricas ─── */
 // Coerción segura: vacío → undefined, rechaza NaN/negativos y aplica tope
@@ -219,7 +220,6 @@ export default function NewPropertyPage() {
   const { user } = useAuthStore();
   const hasAccess = useHasAccess(ALLOWED_ROLES);
   const [success, setSuccess]   = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [files, setFiles]       = useState<Partial<Record<FileKey, File>>>({});
   const fileRefs = useRef<Partial<Record<FileKey, HTMLInputElement>>>({});
@@ -267,7 +267,6 @@ export default function NewPropertyPage() {
   };
 
   const onSubmit = async (data: any) => {
-    setErrorMsg(null);
     try {
       const res = await propertiesApi.create({
         ...data,
@@ -301,9 +300,10 @@ export default function NewPropertyPage() {
       }
 
       setSuccess(true);
+      notify.success('Propiedad guardada correctamente.');
       setTimeout(() => router.push('/properties'), 2500);
-    } catch (err: unknown) {
-      setErrorMsg(getApiErrorMessage(err, 'Error al guardar la propiedad. Intenta de nuevo.'));
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setUploading(false);
     }
@@ -350,11 +350,6 @@ export default function NewPropertyPage() {
           </div>
         </div>
 
-        {errorMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={15} />{errorMsg}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 

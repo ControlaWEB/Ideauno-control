@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Header } from '@/components/header';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { operationsApi, documentsApi, api } from '@/lib/api';
+import { notify } from '@/lib/toast';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
@@ -86,7 +87,6 @@ export default function OperationDetailPage() {
   const { user } = useAuthStore();
   const isAdmin = ADMIN_ROLES.includes(user?.role ?? '');
 
-  const [statusError, setStatusError] = useState<string | null>(null);
   const [validatingDoc, setValidatingDoc] = useState<string | null>(null);
   const [docObservacion, setDocObservacion] = useState('');
   const [docAction, setDocAction] = useState<'Validado' | 'Rechazado' | null>(null);
@@ -123,8 +123,12 @@ export default function OperationDetailPage() {
 
   const handleViewDoc = async (docId: string) => {
     const res = await documentsApi.getSignedUrl(docId);
-    const url = res.data?.url ?? res.data;
-    if (url) window.open(url, '_blank');
+    const url = res.data?.signedUrl ?? res.data?.data?.signedUrl ?? res.data?.url;
+    if (typeof url === 'string' && url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      notify.error('No se pudo obtener el enlace del documento.');
+    }
   };
 
   const handleConfirmDocStatus = async () => {
@@ -137,32 +141,26 @@ export default function OperationDetailPage() {
   };
 
   const handleOpStatus = async (status: string) => {
-    setStatusError(null);
     try {
       await operationsApi.updateStatus(id, status);
       queryClient.invalidateQueries({ queryKey: ['operation', id] });
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
-      const raw = axiosErr?.response?.data?.message;
-      const msg = Array.isArray(raw) ? raw[0] : raw;
-      setStatusError(typeof msg === 'string' ? msg : 'Error al cambiar el estatus de la operación.');
+      notify.success('Estatus de la operación actualizado.');
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     }
   };
 
   const handleCancel = async () => {
-    if (!cancelMotivo.trim()) { setStatusError('El motivo de cancelación es requerido.'); return; }
-    setStatusError(null);
+    if (!cancelMotivo.trim()) { notify.error('El motivo de cancelación es requerido.'); return; }
     setCancelLoading(true);
     try {
       await operationsApi.cancel(id, cancelMotivo.trim());
       queryClient.invalidateQueries({ queryKey: ['operation', id] });
       setShowCancelForm(false);
       setCancelMotivo('');
-    } catch (err: unknown) {
-      const axiosErr = err as { response?: { data?: { message?: string | string[] } } };
-      const raw = axiosErr?.response?.data?.message;
-      const msg = Array.isArray(raw) ? raw[0] : raw;
-      setStatusError(typeof msg === 'string' ? msg : 'Error al cancelar la operación.');
+      notify.success('Operación cancelada.');
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setCancelLoading(false);
     }
@@ -306,11 +304,6 @@ export default function OperationDetailPage() {
             <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>
               Estado actual: <StatusBadge status={currentStatus} />
             </div>
-            {statusError && (
-              <div style={{ background: '#fee2e2', border: '1px solid #fecaca', borderRadius: 'var(--radius-sm)', padding: '10px 14px', color: '#991b1b', fontSize: 13, marginBottom: 14 }}>
-                {statusError}
-              </div>
-            )}
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               {canValidate && (
                 <button
@@ -374,7 +367,7 @@ export default function OperationDetailPage() {
                     </button>
                     <button
                       className="btn btn-secondary"
-                      onClick={() => { setShowCancelForm(false); setCancelMotivo(''); setStatusError(null); }}
+                      onClick={() => { setShowCancelForm(false); setCancelMotivo(''); }}
                     >
                       Descartar
                     </button>
@@ -412,7 +405,7 @@ export default function OperationDetailPage() {
                           {String(doc.tipo_documento ?? '—')}
                         </div>
                       </div>
-                      <DocStatusBadge status={String(doc.estatus ?? doc.status ?? 'Pendiente')} />
+                      <DocStatusBadge status={String(doc.estatus_documento ?? doc.estatus ?? doc.status ?? 'Pendiente')} />
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         <button
                           className="btn btn-secondary"

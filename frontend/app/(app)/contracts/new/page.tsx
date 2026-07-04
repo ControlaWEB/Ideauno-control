@@ -11,8 +11,9 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, FileText, Home, AlertCircle, CheckCircle } from 'lucide-react';
 import {
   zNombre, zEmailOpcional, zTelefono, zTelefonoOpcional, zNombreOpcional,
-  MAX_MONTO, MAX_TEXTO_LARGO, soloDigitos, getApiErrorMessage,
+  MAX_MONTO, MAX_TEXTO_LARGO, soloDigitos,
 } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 /* ─── Piezas numéricas ─── */
 const zNumOpcional = (max: number, msg = 'Ingresa un monto válido.') =>
@@ -159,7 +160,6 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 export default function NewContractPage() {
   const router = useRouter();
   const [tipoSolicitud, setTipoSolicitud] = useState<TipoSolicitud | null>(null);
-  const [errorMsg, setErrorMsg]           = useState<string | null>(null);
   const [success, setSuccess]             = useState(false);
 
   const { data: propertiesData } = useQuery({
@@ -195,14 +195,12 @@ export default function NewContractPage() {
   const incluyeMantenimiento     = useWatch({ control, name: 'incluyeMantenimiento' });
 
   const onSubmit = async (data: FormData) => {
-    setErrorMsg(null);
-
     // Manual validation for conditional required fields
     if (tipoSolicitud === 'Contrato arrendamiento') {
-      if (!data.fechaInicioContrato) { setErrorMsg('La fecha de inicio del contrato es requerida'); return; }
-      if (!data.vigencia)             { setErrorMsg('La vigencia del contrato es requerida'); return; }
-      if (!data.depositoGarantia)     { setErrorMsg('El depósito en garantía es requerido'); return; }
-      if (!data.diaPagoMensual)       { setErrorMsg('El día de pago mensual es requerido'); return; }
+      if (!data.fechaInicioContrato) { notify.error('La fecha de inicio del contrato es requerida'); return; }
+      if (!data.vigencia)             { notify.error('La vigencia del contrato es requerida'); return; }
+      if (!data.depositoGarantia)     { notify.error('El depósito en garantía es requerido'); return; }
+      if (!data.diaPagoMensual)       { notify.error('El día de pago mensual es requerido'); return; }
     }
 
     try {
@@ -304,9 +302,10 @@ export default function NewContractPage() {
       });
 
       setSuccess(true);
+      notify.success('Solicitud de contrato enviada correctamente.');
       setTimeout(() => router.push('/contracts'), 2500);
-    } catch (err: unknown) {
-      setErrorMsg(getApiErrorMessage(err, 'Error al enviar la solicitud. Intenta de nuevo.'));
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     }
   };
 
@@ -429,11 +428,6 @@ export default function NewContractPage() {
           </div>
         </div>
 
-        {errorMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={15} />{errorMsg}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 

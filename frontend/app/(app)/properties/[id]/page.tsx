@@ -8,6 +8,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
 import { FileText, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
+import { notify } from '@/lib/toast';
 
 const MXN = (v: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
@@ -122,14 +123,19 @@ export default function PropertyDetailPage() {
 
   const handleViewDoc = async (docId: string) => {
     const res = await documentsApi.getSignedUrl(docId);
-    const url = res.data?.url ?? res.data;
-    if (url) window.open(url, '_blank');
+    const url = res.data?.signedUrl ?? res.data?.data?.signedUrl ?? res.data?.url;
+    if (typeof url === 'string' && url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      notify.error('No se pudo obtener el enlace del documento.');
+    }
   };
 
   const handleConfirmDocStatus = async () => {
     if (!validatingDoc || !docAction) return;
     await documentsApi.updateStatus(validatingDoc, docAction, docObservacion || undefined);
     queryClient.invalidateQueries({ queryKey: ['docs', 'propiedad', id] });
+    notify.success(`Documento ${docAction === 'Validado' ? 'validado' : 'rechazado'}.`);
     setValidatingDoc(null);
     setDocObservacion('');
     setDocAction(null);
@@ -141,6 +147,10 @@ export default function PropertyDetailPage() {
     try {
       await api.patch(`/properties/${id}/status`, { status: newStatus });
       queryClient.invalidateQueries({ queryKey: ['property', id] });
+      notify.success(`Estatus cambiado a "${newStatus}".`);
+      setNewStatus('');
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setChangingStatus(false);
     }
@@ -151,6 +161,9 @@ export default function PropertyDetailPage() {
     try {
       await api.patch(`/properties/${id}`, { contratoComisionFirmado: true });
       queryClient.invalidateQueries({ queryKey: ['property', id] });
+      notify.success('Contrato de comisión marcado como firmado.');
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setMarkingContract(false);
     }
@@ -338,7 +351,7 @@ export default function PropertyDetailPage() {
                           {String(doc.tipo_documento ?? '—')}
                         </div>
                       </div>
-                      <DocStatusBadge status={String(doc.estatus ?? doc.status ?? 'Pendiente')} />
+                      <DocStatusBadge status={String(doc.estatus_documento ?? doc.estatus ?? doc.status ?? 'Pendiente')} />
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         <button
                           className="btn btn-secondary"

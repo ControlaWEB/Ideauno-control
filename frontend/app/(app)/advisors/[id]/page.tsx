@@ -8,7 +8,8 @@ import { useAuthStore } from '@/store/auth.store';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
 import { FileText, ArrowLeft } from 'lucide-react';
-import { CLABE_RE, SOLO_LETRAS, soloDigitos, getApiErrorMessage } from '@/lib/validators';
+import { CLABE_RE, SOLO_LETRAS, soloDigitos } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 const MXN = (v: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
@@ -81,12 +82,10 @@ export default function AdvisorDetailPage() {
   const [motivoBaja, setMotivoBaja] = useState('');
   const [fechaBaja, setFechaBaja] = useState('');
   const [statusSaving, setStatusSaving] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   // Bank form
   const [bankForm, setBankForm] = useState({ clabe: '', banco: '', titular: '' });
   const [bankSaving, setBankSaving] = useState(false);
-  const [bankMsg, setBankMsg] = useState<{ text: string; ok: boolean } | null>(null);
 
   const { data: advisorData, isLoading: loadingAdvisor, error: advisorError } = useQuery({
     queryKey: ['advisor', id],
@@ -105,23 +104,26 @@ export default function AdvisorDetailPage() {
 
   const handleViewDoc = async (docId: string) => {
     const res = await documentsApi.getSignedUrl(docId);
-    const url = res.data?.url ?? res.data;
-    if (url) window.open(url, '_blank');
+    const url = res.data?.signedUrl ?? res.data?.data?.signedUrl ?? res.data?.url;
+    if (typeof url === 'string' && url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      notify.error('No se pudo obtener el enlace del documento.');
+    }
   };
 
   const handleStatusSave = async () => {
     if (!newStatus) return;
     setStatusSaving(true);
-    setStatusMsg(null);
     try {
       await advisorsApi.updateStatus(id, newStatus, motivoBaja || undefined, fechaBaja || undefined);
       queryClient.invalidateQueries({ queryKey: ['advisor', id] });
-      setStatusMsg({ text: 'Estatus actualizado correctamente', ok: true });
+      notify.success('Estatus del asesor actualizado correctamente.');
       setNewStatus('');
       setMotivoBaja('');
       setFechaBaja('');
-    } catch (e: any) {
-      setStatusMsg({ text: e?.response?.data?.message ?? 'Error al actualizar estatus', ok: false });
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setStatusSaving(false);
     }
@@ -132,25 +134,24 @@ export default function AdvisorDetailPage() {
     const banco = bankForm.banco.trim();
     const titular = bankForm.titular.trim();
     if (!clabe || !banco || !titular) {
-      setBankMsg({ text: 'Todos los campos bancarios son requeridos', ok: false });
+      notify.error('Todos los campos bancarios son requeridos');
       return;
     }
     if (!CLABE_RE.test(clabe)) {
-      setBankMsg({ text: 'La CLABE debe tener exactamente 18 dígitos', ok: false });
+      notify.error('La CLABE debe tener exactamente 18 dígitos');
       return;
     }
     if (!SOLO_LETRAS.test(titular)) {
-      setBankMsg({ text: 'El titular solo puede contener letras, espacios y acentos', ok: false });
+      notify.error('El titular solo puede contener letras, espacios y acentos');
       return;
     }
     setBankSaving(true);
-    setBankMsg(null);
     try {
       await advisorsApi.updateBank(id, clabe, banco, titular);
       queryClient.invalidateQueries({ queryKey: ['advisor', id] });
-      setBankMsg({ text: 'Datos bancarios guardados', ok: true });
-    } catch (e: unknown) {
-      setBankMsg({ text: getApiErrorMessage(e, 'Error al guardar datos bancarios'), ok: false });
+      notify.success('Datos bancarios guardados.');
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setBankSaving(false);
     }
@@ -284,16 +285,6 @@ export default function AdvisorDetailPage() {
           <>
             <div className="card" style={{ marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-primary)', marginBottom: 16 }}>Cambio de Estatus</div>
-              {statusMsg && (
-                <div style={{
-                  background: statusMsg.ok ? '#f0fdf4' : '#fef2f2',
-                  border: `1px solid ${statusMsg.ok ? '#86efac' : '#fecaca'}`,
-                  borderRadius: 'var(--radius-sm)', padding: '8px 14px',
-                  fontSize: 13, color: statusMsg.ok ? '#166534' : '#b91c1c', marginBottom: 14,
-                }}>
-                  {statusMsg.text}
-                </div>
-              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
                 <div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-on-surface-variant)', textTransform: 'uppercase', marginBottom: 6 }}>Nuevo estatus</div>
@@ -349,16 +340,6 @@ export default function AdvisorDetailPage() {
               <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 16 }}>
                 Requeridos para liberar pago de comisión. Valores actuales: {data.clabe_interbancaria ? `${data.banco} — ${data.clabe_interbancaria}` : 'No registrados'}
               </div>
-              {bankMsg && (
-                <div style={{
-                  background: bankMsg.ok ? '#f0fdf4' : '#fef2f2',
-                  border: `1px solid ${bankMsg.ok ? '#86efac' : '#fecaca'}`,
-                  borderRadius: 'var(--radius-sm)', padding: '8px 14px',
-                  fontSize: 13, color: bankMsg.ok ? '#166534' : '#b91c1c', marginBottom: 14,
-                }}>
-                  {bankMsg.text}
-                </div>
-              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 14 }}>
                 {[
                   { label: 'CLABE interbancaria (18 dígitos)', key: 'clabe', placeholder: '000000000000000000' },
@@ -421,7 +402,7 @@ export default function AdvisorDetailPage() {
                           {String(doc.tipo_documento ?? '—')}
                         </div>
                       </div>
-                      <DocStatusBadge status={String(doc.estatus ?? doc.status ?? 'Pendiente')} />
+                      <DocStatusBadge status={String(doc.estatus_documento ?? doc.estatus ?? doc.status ?? 'Pendiente')} />
                       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                         <button
                           className="btn btn-secondary"

@@ -1,6 +1,8 @@
 // lib/api.ts
 import axios from 'axios';
 import { useAuthStore } from '@/store/auth.store';
+import { notify } from '@/lib/toast';
+import { getApiErrorMessage } from '@/lib/validators';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
@@ -43,13 +45,23 @@ api.interceptors.response.use(
         window.location.href = '/login';
       }
     }
+
+    // Toast flotante automático para cualquier error de API (salvo 401 y opt-out).
+    const status = error.response?.status;
+    const skip = (error.config as { skipErrorToast?: boolean } | undefined)?.skipErrorToast;
+    if (status !== 401 && !skip && typeof window !== 'undefined') {
+      notify.error(getApiErrorMessage(error));
+    }
+
     return Promise.reject(error);
   }
 );
 
 // AUTH
 export const authApi = {
-  login: (email: string, password: string) => api.post('/auth/login', { email, password }),
+  // Login maneja su propio error inline; evitamos el toast global duplicado.
+  login: (email: string, password: string) =>
+    api.post('/auth/login', { email, password }, { skipErrorToast: true } as never),
   register: (data: Record<string, unknown>) => api.post('/auth/register', data),
   refresh: (refreshToken: string) =>
     api.post('/auth/refresh', null, { headers: { Authorization: `Bearer ${refreshToken}` } }),
@@ -140,6 +152,13 @@ export const clientsApi = {
 // AUDIT
 export const auditApi = {
   getAll: (params?: Record<string, unknown>) => api.get('/audit', { params }),
+};
+
+// NOTIFICATIONS (bandeja in-app del asesor)
+export const notificationsApi = {
+  getAll: (limit = 20) => api.get('/notifications', { params: { limit } }),
+  markRead: (id: string) => api.patch(`/notifications/${id}/read`, {}),
+  markAllRead: () => api.patch('/notifications/read-all', {}),
 };
 
 // ADVISORS

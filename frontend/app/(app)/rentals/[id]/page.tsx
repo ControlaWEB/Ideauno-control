@@ -8,6 +8,7 @@ import { formatCurrency, formatDate } from '@/lib/utils';
 import { useParams, useRouter } from 'next/navigation';
 import { FileText, ArrowLeft } from 'lucide-react';
 import { useState } from 'react';
+import { notify } from '@/lib/toast';
 
 const ADMIN_ROLES = ['Super Admin', 'Admin'];
 
@@ -100,8 +101,12 @@ export default function RentalDetailPage() {
 
   const handleViewDoc = async (docId: string) => {
     const res = await documentsApi.getSignedUrl(docId);
-    const url = res.data?.url ?? res.data;
-    if (url) window.open(url, '_blank');
+    const url = res.data?.signedUrl ?? res.data?.data?.signedUrl ?? res.data?.url;
+    if (typeof url === 'string' && url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } else {
+      notify.error('No se pudo obtener el enlace del documento.');
+    }
   };
 
   const handleDocStatus = async (docId: string, status: string) => {
@@ -377,7 +382,7 @@ export default function RentalDetailPage() {
                         {String(doc.tipo_documento ?? '—')}
                       </div>
                     </div>
-                    <DocStatusBadge status={String(doc.estatus ?? doc.status ?? 'Pendiente')} />
+                    <DocStatusBadge status={String(doc.estatus_documento ?? doc.estatus ?? doc.status ?? 'Pendiente')} />
                     <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                       <button
                         className="btn btn-secondary"

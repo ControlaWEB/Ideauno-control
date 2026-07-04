@@ -1,64 +1,91 @@
 'use client';
 
 // components/notifications-bell.tsx
-// Campana de notificaciones: muestra los últimos movimientos del sistema (audit logs).
+// Campana de notificaciones.
+//  · Admin / Super Admin  → últimos movimientos del sistema (audit logs).
+//  · Asesor               → su bandeja personal (comisiones, pagos, operaciones).
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bell, UserPlus, UserCog, Landmark, FileSignature, Lock, Unlock,
   XCircle, RefreshCw, CheckCircle2, DollarSign, ThumbsDown, Activity,
 } from 'lucide-react';
-import { auditApi } from '@/lib/api';
+import { auditApi, notificationsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatCurrency } from '@/lib/utils';
 
-interface AuditEntry {
-  id: string;
-  user_email: string;
-  action: string;
-  details: Record<string, unknown>;
-  timestamp: string;
-}
-
 const ADMIN_ROLES = ['Super Admin', 'Admin'];
+const ASESOR_ROLE = 'Asesor';
 const LAST_SEEN_KEY = 'audit-last-seen';
 
 const money = (v: unknown) => (typeof v === 'number' ? formatCurrency(v) : String(v ?? ''));
 
-// Mapa acción → { texto legible, icono, color }
-function describe(entry: AuditEntry): { text: string; Icon: typeof Bell; color: string } {
-  const d = entry.details ?? {};
-  switch (entry.action) {
-    case 'CREATE_ADVISOR':
-      return { text: `Alta de asesor: ${d.name ?? ''}`, Icon: UserPlus, color: 'var(--color-success)' };
-    case 'UPDATE_ADVISOR_STATUS':
-      return { text: `Estatus de asesor → ${d.newStatus ?? ''}`, Icon: UserCog, color: 'var(--color-primary)' };
-    case 'UPDATE_ADVISOR_BANK':
-      return { text: 'Datos bancarios de asesor actualizados', Icon: Landmark, color: 'var(--color-primary)' };
-    case 'UPDATE_ADVISOR':
-      return { text: 'Asesor editado', Icon: UserCog, color: 'var(--color-primary)' };
-    case 'CREATE_OPERATION':
-      return { text: `Nueva operación (${d.type ?? ''}) · comisión ${money(d.montoComision)}`, Icon: FileSignature, color: 'var(--color-success)' };
-    case 'RELEASE_COMMISSION':
-      return { text: 'Comisión liberada', Icon: Unlock, color: 'var(--color-success)' };
-    case 'BLOCK_COMMISSION':
-      return { text: `Comisión bloqueada${d.motivo ? `: ${d.motivo}` : ''}`, Icon: Lock, color: 'var(--color-error)' };
-    case 'UNBLOCK_COMMISSION':
-      return { text: 'Comisión desbloqueada', Icon: Unlock, color: 'var(--color-primary)' };
-    case 'CANCEL_OPERATION':
-      return { text: `Operación cancelada${d.motivo ? `: ${d.motivo}` : ''}`, Icon: XCircle, color: 'var(--color-error)' };
-    case 'UPDATE_OPERATION_STATUS':
-      return { text: `Estatus de operación → ${d.newStatus ?? ''}`, Icon: RefreshCw, color: 'var(--color-primary)' };
-    case 'AUTHORIZE_PAYMENT':
-      return { text: 'Pago autorizado', Icon: CheckCircle2, color: 'var(--color-success)' };
-    case 'MARK_PAYMENT_PAID':
-      return { text: `Pago realizado (${d.formaPago ?? ''}) · ${money(d.monto)}`, Icon: DollarSign, color: 'var(--color-success)' };
-    case 'REJECT_PAYMENT':
-      return { text: `Pago rechazado${d.observaciones ? `: ${d.observaciones}` : ''}`, Icon: ThumbsDown, color: 'var(--color-error)' };
-    default:
-      return { text: entry.action, Icon: Activity, color: 'var(--color-on-surface-variant)' };
+interface FeedItem {
+  id: string;
+  text: string;
+  sub: string;
+  Icon: typeof Bell;
+  color: string;
+  ts: number;
+}
+
+// ── Iconos/colores por tipo (compartido entre audit y notificaciones) ──
+const TYPE_STYLE: Record<string, { Icon: typeof Bell; color: string }> = {
+  CREATE_ADVISOR:          { Icon: UserPlus,     color: 'var(--color-success)' },
+  UPDATE_ADVISOR_STATUS:   { Icon: UserCog,      color: 'var(--color-primary)' },
+  UPDATE_ADVISOR_BANK:     { Icon: Landmark,     color: 'var(--color-primary)' },
+  UPDATE_ADVISOR:          { Icon: UserCog,      color: 'var(--color-primary)' },
+  CREATE_OPERATION:        { Icon: FileSignature, color: 'var(--color-success)' },
+  OPERATION_CREATED:       { Icon: FileSignature, color: 'var(--color-success)' },
+  RELEASE_COMMISSION:      { Icon: Unlock,       color: 'var(--color-success)' },
+  COMMISSION_RELEASED:     { Icon: Unlock,       color: 'var(--color-success)' },
+  BLOCK_COMMISSION:        { Icon: Lock,         color: 'var(--color-error)' },
+  COMMISSION_BLOCKED:      { Icon: Lock,         color: 'var(--color-error)' },
+  UNBLOCK_COMMISSION:      { Icon: Unlock,       color: 'var(--color-primary)' },
+  COMMISSION_UNBLOCKED:    { Icon: Unlock,       color: 'var(--color-primary)' },
+  CANCEL_OPERATION:        { Icon: XCircle,      color: 'var(--color-error)' },
+  OPERATION_CANCELLED:     { Icon: XCircle,      color: 'var(--color-error)' },
+  UPDATE_OPERATION_STATUS: { Icon: RefreshCw,    color: 'var(--color-primary)' },
+  AUTHORIZE_PAYMENT:       { Icon: CheckCircle2, color: 'var(--color-success)' },
+  PAYMENT_AUTHORIZED:      { Icon: CheckCircle2, color: 'var(--color-success)' },
+  MARK_PAYMENT_PAID:       { Icon: DollarSign,   color: 'var(--color-success)' },
+  PAYMENT_PAID:            { Icon: DollarSign,   color: 'var(--color-success)' },
+  REJECT_PAYMENT:          { Icon: ThumbsDown,   color: 'var(--color-error)' },
+  PAYMENT_REJECTED:        { Icon: ThumbsDown,   color: 'var(--color-error)' },
+};
+
+const styleOf = (type: string) => TYPE_STYLE[type] ?? { Icon: Activity, color: 'var(--color-on-surface-variant)' };
+
+// ── Audit log → texto legible (vista admin) ──
+interface AuditEntry {
+  id: string; user_email: string; action: string;
+  details: Record<string, unknown>; timestamp: string;
+}
+function auditText(e: AuditEntry): string {
+  const d = e.details ?? {};
+  switch (e.action) {
+    case 'CREATE_ADVISOR': return `Alta de asesor: ${d.name ?? ''}`;
+    case 'UPDATE_ADVISOR_STATUS': return `Estatus de asesor → ${d.newStatus ?? ''}`;
+    case 'UPDATE_ADVISOR_BANK': return 'Datos bancarios de asesor actualizados';
+    case 'UPDATE_ADVISOR': return 'Asesor editado';
+    case 'CREATE_OPERATION': return `Nueva operación (${d.type ?? ''}) · comisión ${money(d.montoComision)}`;
+    case 'RELEASE_COMMISSION': return 'Comisión liberada';
+    case 'BLOCK_COMMISSION': return `Comisión bloqueada${d.motivo ? `: ${d.motivo}` : ''}`;
+    case 'UNBLOCK_COMMISSION': return 'Comisión desbloqueada';
+    case 'CANCEL_OPERATION': return `Operación cancelada${d.motivo ? `: ${d.motivo}` : ''}`;
+    case 'UPDATE_OPERATION_STATUS': return `Estatus de operación → ${d.newStatus ?? ''}`;
+    case 'AUTHORIZE_PAYMENT': return 'Pago autorizado';
+    case 'MARK_PAYMENT_PAID': return `Pago realizado (${d.formaPago ?? ''}) · ${money(d.monto)}`;
+    case 'REJECT_PAYMENT': return `Pago rechazado${d.observaciones ? `: ${d.observaciones}` : ''}`;
+    default: return e.action;
   }
+}
+
+// ── Notificación de asesor ──
+interface AdvisorNotification {
+  id: string; type: string; title: string; body: string;
+  read: boolean; created_at: string;
 }
 
 function relativeTime(iso: string): string {
@@ -78,31 +105,62 @@ function relativeTime(iso: string): string {
 export function NotificationsBell() {
   const { user } = useAuthStore();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [lastSeen, setLastSeen] = useState(0);
   const wrapperRef = useRef<HTMLDivElement>(null);
 
-  const hasAccess = ADMIN_ROLES.includes(user?.role ?? '');
+  const role = user?.role ?? '';
+  const isAdmin = ADMIN_ROLES.includes(role);
+  const isAsesor = role === ASESOR_ROLE;
 
   useEffect(() => {
     const raw = typeof window !== 'undefined' ? localStorage.getItem(LAST_SEEN_KEY) : null;
     setLastSeen(raw ? Number(raw) : 0);
   }, []);
 
-  const { data, isLoading } = useQuery<{ data: AuditEntry[] }>({
+  // ── Fuente ADMIN: audit ──
+  const auditQuery = useQuery<{ data: AuditEntry[] }>({
     queryKey: ['audit', 'notifications'],
     queryFn: () => auditApi.getAll({ page: 1, limit: 12 }).then((r) => r.data),
-    enabled: hasAccess,
+    enabled: isAdmin,
     refetchInterval: 60000,
     refetchOnWindowFocus: true,
   });
 
-  const entries = useMemo(() => data?.data ?? [], [data]);
+  // ── Fuente ASESOR: notifications ──
+  const notifQuery = useQuery<{ data: AdvisorNotification[]; unread: number }>({
+    queryKey: ['notifications', 'me'],
+    queryFn: () => notificationsApi.getAll(15).then((r) => r.data),
+    enabled: isAsesor,
+    refetchInterval: 60000,
+    refetchOnWindowFocus: true,
+  });
 
-  const unread = useMemo(
-    () => entries.filter((e) => new Date(e.timestamp).getTime() > lastSeen).length,
-    [entries, lastSeen],
-  );
+  const isLoading = isAdmin ? auditQuery.isLoading : notifQuery.isLoading;
+
+  const items: FeedItem[] = useMemo(() => {
+    if (isAdmin) {
+      return (auditQuery.data?.data ?? []).map((e) => {
+        const { Icon, color } = styleOf(e.action);
+        const actor = e.user_email && e.user_email !== 'system' ? `${e.user_email} · ` : '';
+        return { id: e.id, text: auditText(e), sub: `${actor}${relativeTime(e.timestamp)}`, Icon, color, ts: new Date(e.timestamp).getTime() };
+      });
+    }
+    if (isAsesor) {
+      return (notifQuery.data?.data ?? []).map((n) => {
+        const { Icon, color } = styleOf(n.type);
+        return { id: n.id, text: n.title, sub: `${n.body ? `${n.body} · ` : ''}${relativeTime(n.created_at)}`, Icon, color, ts: new Date(n.created_at).getTime() };
+      });
+    }
+    return [];
+  }, [isAdmin, isAsesor, auditQuery.data, notifQuery.data]);
+
+  const unread = useMemo(() => {
+    if (isAdmin) return items.filter((i) => i.ts > lastSeen).length;
+    if (isAsesor) return notifQuery.data?.unread ?? 0;
+    return 0;
+  }, [isAdmin, isAsesor, items, lastSeen, notifQuery.data]);
 
   // Cerrar al hacer clic fuera
   useEffect(() => {
@@ -114,17 +172,27 @@ export function NotificationsBell() {
     return () => document.removeEventListener('mousedown', onClick);
   }, [open]);
 
-  const toggle = () => {
+  const toggle = async () => {
     const next = !open;
     setOpen(next);
-    if (next && entries.length) {
-      const newest = new Date(entries[0].timestamp).getTime();
+    if (!next) return;
+    if (isAdmin && items.length) {
+      const newest = items[0].ts;
       localStorage.setItem(LAST_SEEN_KEY, String(newest));
       setLastSeen(newest);
     }
+    if (isAsesor && unread > 0) {
+      try {
+        await notificationsApi.markAllRead();
+        queryClient.invalidateQueries({ queryKey: ['notifications', 'me'] });
+      } catch { /* best-effort */ }
+    }
   };
 
-  if (!hasAccess) return null;
+  if (!isAdmin && !isAsesor) return null;
+
+  const title = isAdmin ? 'Movimientos recientes' : 'Mis notificaciones';
+  const emptyText = isAdmin ? 'Sin movimientos por ahora' : 'No tienes notificaciones';
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative' }}>
@@ -137,7 +205,7 @@ export function NotificationsBell() {
           <Bell size={18} />
           {unread > 0 && <span className="notif-dot" />}
         </button>
-        {!open && <span className="tooltip">Movimientos</span>}
+        {!open && <span className="tooltip">Notificaciones</span>}
       </div>
 
       {open && (
@@ -145,12 +213,12 @@ export function NotificationsBell() {
           style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0, width: 380, maxWidth: '90vw',
             background: 'var(--color-surface-container-lowest)', border: '1px solid var(--color-outline-variant)',
-            borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-lg, 0 10px 30px rgba(0,0,0,0.15))',
+            borderRadius: 'var(--radius-lg)', boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
             zIndex: 200, overflow: 'hidden',
           }}
         >
           <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--color-outline-variant)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--color-on-surface)' }}>Movimientos recientes</span>
+            <span style={{ fontSize: 13.5, fontWeight: 650, color: 'var(--color-on-surface)' }}>{title}</span>
             {unread > 0 && (
               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-primary)' }}>{unread} nuevo(s)</span>
             )}
@@ -163,30 +231,27 @@ export function NotificationsBell() {
                   <div key={i} className="skeleton" style={{ height: 44, borderRadius: 'var(--radius-md)' }} />
                 ))}
               </div>
-            ) : entries.length === 0 ? (
+            ) : items.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center', color: 'var(--color-on-surface-variant)', fontSize: 13 }}>
-                Sin movimientos por ahora
+                {emptyText}
               </div>
             ) : (
-              entries.map((entry) => {
-                const { text, Icon, color } = describe(entry);
-                const actor = entry.user_email && entry.user_email !== 'system' ? entry.user_email : null;
+              items.map((item) => {
+                const { Icon } = item;
                 return (
                   <div
-                    key={entry.id}
+                    key={item.id}
                     style={{
                       display: 'flex', gap: 10, padding: '11px 16px', alignItems: 'flex-start',
                       borderBottom: '1px solid var(--color-outline-variant)',
                     }}
                   >
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: `${color}18`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: `${item.color}18`, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <Icon size={15} />
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 12.5, color: 'var(--color-on-surface)', lineHeight: 1.35 }}>{text}</div>
-                      <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 2 }}>
-                        {actor ? `${actor} · ` : ''}{relativeTime(entry.timestamp)}
-                      </div>
+                      <div style={{ fontSize: 12.5, color: 'var(--color-on-surface)', lineHeight: 1.35, fontWeight: 550 }}>{item.text}</div>
+                      <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 2 }}>{item.sub}</div>
                     </div>
                   </div>
                 );
@@ -194,15 +259,17 @@ export function NotificationsBell() {
             )}
           </div>
 
-          <button
-            onClick={() => { setOpen(false); router.push('/audit'); }}
-            style={{
-              width: '100%', padding: '11px 16px', border: 'none', background: 'transparent',
-              color: 'var(--color-primary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            Ver toda la auditoría
-          </button>
+          {isAdmin && (
+            <button
+              onClick={() => { setOpen(false); router.push('/audit'); }}
+              style={{
+                width: '100%', padding: '11px 16px', border: 'none', background: 'transparent',
+                color: 'var(--color-primary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+              }}
+            >
+              Ver toda la auditoría
+            </button>
+          )}
         </div>
       )}
     </div>

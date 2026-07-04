@@ -7,7 +7,8 @@ import { useForm } from 'react-hook-form';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { Users, Plus, X } from 'lucide-react';
-import { TELEFONO_MX, RFC_RE, MAX_NOMBRE, soloDigitos, getApiErrorMessage } from '@/lib/validators';
+import { TELEFONO_MX, RFC_RE, MAX_NOMBRE, soloDigitos } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 const CREATE_ROLES = ['Super Admin', 'Admin', 'Asesor'];
 
@@ -35,7 +36,6 @@ export default function ClientsPage() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
 
   const { data: clients, isLoading } = useQuery<Client[]>({
     queryKey: ['clients'],
@@ -49,7 +49,6 @@ export default function ClientsPage() {
 
   const onSubmit = async (data: ClientForm) => {
     setSaving(true);
-    setSaveError(null);
     try {
       await api.post('/clients', {
         name: data.name.trim(),
@@ -61,8 +60,9 @@ export default function ClientsPage() {
       await queryClient.invalidateQueries({ queryKey: ['clients'] });
       reset();
       setShowForm(false);
-    } catch (err: unknown) {
-      setSaveError(getApiErrorMessage(err, 'Error al guardar el cliente'));
+      notify.success('Cliente guardado correctamente.');
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setSaving(false);
     }
@@ -70,7 +70,6 @@ export default function ClientsPage() {
 
   const handleCancel = () => {
     reset();
-    setSaveError(null);
     setShowForm(false);
   };
 
@@ -195,10 +194,6 @@ export default function ClientsPage() {
                   {errors.email && <span style={{ fontSize: 12, color: 'var(--color-error)', marginTop: 4 }}>{errors.email.message}</span>}
                 </div>
               </div>
-
-              {saveError && (
-                <div style={{ fontSize: 13, color: 'var(--color-error)', marginBottom: 12 }}>{saveError}</div>
-              )}
 
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-primary" type="submit" disabled={saving}>

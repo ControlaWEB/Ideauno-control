@@ -14,7 +14,8 @@ import {
   ShieldAlert, AlertCircle, Upload, X, Calculator,
 } from 'lucide-react';
 import { useHasAccess, AccessDenied } from '@/components/access-guard';
-import { MAX_MONTO, getApiErrorMessage } from '@/lib/validators';
+import { MAX_MONTO } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 const ALLOWED_ROLES = ['Super Admin', 'Admin', 'Asesor'];
 
@@ -178,7 +179,6 @@ export default function NewOperationPage() {
   const [success, setSuccess]         = useState(false);
   const [uploading, setUploading]     = useState(false);
   const [commBreakdown, setComm]      = useState<any>(null);
-  const [errorMsg, setErrorMsg]       = useState<string | null>(null);
   const [files, setFiles]             = useState<Partial<Record<FileKey, File>>>({});
   const fileRefs = useRef<Partial<Record<FileKey, HTMLInputElement>>>({});
 
@@ -243,7 +243,6 @@ export default function NewOperationPage() {
   const pldFlag = precio >= 941412.75;
 
   const onSubmit = async (data: any) => {
-    setErrorMsg(null);
     try {
       const res = await operationsApi.create({
         tipoOperacion:          data.tipoOperacion,
@@ -286,9 +285,10 @@ export default function NewOperationPage() {
 
       setComm(res.data?.commBreakdown ?? null);
       setSuccess(true);
+      notify.success('Cierre registrado correctamente.');
       setTimeout(() => router.push('/operations'), 3000);
-    } catch (err: unknown) {
-      setErrorMsg(getApiErrorMessage(err, 'Error al registrar el cierre. Intenta de nuevo.'));
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setUploading(false);
     }
@@ -364,11 +364,6 @@ export default function NewOperationPage() {
           </div>
         </div>
 
-        {errorMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={15} />{errorMsg}
-          </div>
-        )}
 
         {pldFlag && (
           <div style={{ background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20, fontSize: 12.5, color: '#c2410c', display: 'flex', alignItems: 'center', gap: 10 }}>

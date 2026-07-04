@@ -7,6 +7,7 @@ import { templatesApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import { FolderOpen, Plus, Download, Trash2, Upload } from 'lucide-react';
+import { notify } from '@/lib/toast';
 
 const CATEGORIAS = ['KYC', 'PLD', 'Contrato', 'Otro'];
 
@@ -25,28 +26,25 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
   const [descripcion, setDescripcion] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const submit = async () => {
     if (!nombre.trim() || !file) {
-      setError('Nombre y archivo son obligatorios.');
+      notify.error('Nombre y archivo son obligatorios.');
       return;
     }
     if (!['KYC', 'PLD', 'Contrato', 'Otro'].includes(categoria)) {
-      setError('Categoría inválida.');
+      notify.error('Categoría inválida.');
       return;
     }
     setSaving(true);
-    setError(null);
     try {
       await templatesApi.upload(file, nombre.trim(), categoria, descripcion.trim());
+      notify.success('Plantilla subida correctamente.');
       onUploaded();
       onClose();
-    } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string | string[] } } };
-      const msg = e?.response?.data?.message;
-      setError(Array.isArray(msg) ? msg.join(' ') : (msg ?? 'Error al subir la plantilla.'));
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setSaving(false);
     }
@@ -79,7 +77,6 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
             <label className="input-label">Archivo (PDF) *</label>
             <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setFile(e.target.files?.[0] ?? null)} />
           </div>
-          {error && <div style={{ color: 'var(--color-error)', fontSize: 12.5 }}>{error}</div>}
           <button className="btn btn-primary" disabled={saving} onClick={submit} style={{ marginTop: 4 }}>
             <Upload size={14} /> {saving ? 'Subiendo...' : 'Subir plantilla'}
           </button>
@@ -114,6 +111,7 @@ export default function TemplatesPage() {
     try {
       await templatesApi.delete(id);
       await queryClient.invalidateQueries({ queryKey: ['templates'] });
+      notify.success('Plantilla eliminada.');
     } finally {
       setDeletingId(null);
     }

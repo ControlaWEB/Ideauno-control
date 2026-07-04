@@ -9,7 +9,7 @@ import { formatDate } from '@/lib/utils';
 import {
   Wallet, CreditCard, CheckCircle2, XCircle, Clock,
 } from 'lucide-react';
-import { getApiErrorMessage } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 const formatMXN = (v: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
@@ -28,8 +28,6 @@ export default function PaymentsPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
 
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg]     = useState<string | null>(null);
   const [paidForms, setPaidForms]   = useState<Record<string, PaidForm>>({});
   const [loadingIds, setLoadingIds] = useState<Record<string, boolean>>({});
 
@@ -52,11 +50,9 @@ export default function PaymentsPage() {
     refetchOnWindowFocus: true,
   });
 
-  const toast = (msg: string, isError = false) => {
-    if (isError) { setErrorMsg(msg); setSuccessMsg(null); }
-    else          { setSuccessMsg(msg); setErrorMsg(null); }
-    setTimeout(() => { setSuccessMsg(null); setErrorMsg(null); }, 4000);
-  };
+  // Toast flotante global. Los errores de API los muestra el interceptor de axios.
+  const toast = (msg: string, isError = false) =>
+    isError ? notify.error(msg) : notify.success(msg);
 
   const setLoader = (key: string, val: boolean) =>
     setLoadingIds(prev => ({ ...prev, [key]: val }));
@@ -68,9 +64,7 @@ export default function PaymentsPage() {
       await queryClient.invalidateQueries({ queryKey: ['payments'] });
       await queryClient.invalidateQueries({ queryKey: ['commissions'] });
       toast('Solicitud de pago enviada correctamente');
-    } catch (err: unknown) {
-      toast(getApiErrorMessage(err, 'Error al solicitar el pago'), true);
-    } finally {
+    } catch { /* toast global */ } finally {
       setLoader(commId, false);
     }
   };
@@ -81,9 +75,7 @@ export default function PaymentsPage() {
       await api.patch(`/payments/${id}/authorize`, {});
       await queryClient.invalidateQueries({ queryKey: ['payments'] });
       toast('Pago autorizado correctamente');
-    } catch {
-      toast('Error al autorizar el pago', true);
-    } finally {
+    } catch { /* toast global */ } finally {
       setLoader(`auth-${id}`, false);
     }
   };
@@ -94,9 +86,7 @@ export default function PaymentsPage() {
       await api.patch(`/payments/${id}/reject`, {});
       await queryClient.invalidateQueries({ queryKey: ['payments'] });
       toast('Solicitud rechazada');
-    } catch {
-      toast('Error al rechazar la solicitud', true);
-    } finally {
+    } catch { /* toast global */ } finally {
       setLoader(`rej-${id}`, false);
     }
   };
@@ -125,9 +115,7 @@ export default function PaymentsPage() {
       await queryClient.invalidateQueries({ queryKey: ['payments'] });
       setPaidForms(prev => { const n = { ...prev }; delete n[id]; return n; });
       toast('Pago registrado exitosamente');
-    } catch (err: unknown) {
-      toast(getApiErrorMessage(err, 'Error al registrar el pago'), true);
-    } finally {
+    } catch { /* toast global */ } finally {
       setLoader(`paid-${id}`, false);
     }
   };
@@ -146,17 +134,6 @@ export default function PaymentsPage() {
             <p className="page-desc">Solicitudes y autorizaciones de pago de comisiones de asesores</p>
           </div>
         </div>
-
-        {successMsg && (
-          <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 'var(--radius-md)', padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#166534', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <CheckCircle2 size={14} /> {successMsg}
-          </div>
-        )}
-        {errorMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#b91c1c' }}>
-            {errorMsg}
-          </div>
-        )}
 
         {/* ─── ASESOR VIEW ─── */}
         {isAsesor && (

@@ -16,8 +16,9 @@ import { useHasAccess, AccessDenied } from '@/components/access-guard';
 import {
   zNombre, zEmailOpcional, zTelefono, zFechaNoFutura,
   MAX_TEXTO_LARGO, MAX_MONTO, MAX_SUPERFICIE,
-  soloDigitos, getApiErrorMessage,
+  soloDigitos,
 } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 /* ─── Piezas numéricas: vacío → undefined, sin NaN/negativos, con tope ─── */
 const zNumOpcional = (max: number, msg = 'Ingresa un número válido.') =>
@@ -201,7 +202,6 @@ export default function RentalsNewPage() {
   const { user } = useAuthStore();
   const hasAccess = useHasAccess(ALLOWED_ROLES);
   const [success, setSuccess]   = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [files, setFiles]       = useState<Partial<Record<FileKey, File>>>({});
   const [servicios, setServicios]     = useState<string[]>([]);
@@ -247,7 +247,6 @@ export default function RentalsNewPage() {
   };
 
   const onSubmit = async (data: any) => {
-    setErrorMsg(null);
     try {
       const res = await propertiesApi.create({
         // Campos comunes (camelCase, mismos que el DTO CreatePropertyDto)
@@ -324,9 +323,10 @@ export default function RentalsNewPage() {
       }
 
       setSuccess(true);
+      notify.success('Propiedad en renta guardada correctamente.');
       setTimeout(() => router.push('/properties'), 2500);
-    } catch (err: unknown) {
-      setErrorMsg(getApiErrorMessage(err, 'Error al guardar. Intenta de nuevo.'));
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setUploading(false);
     }
@@ -373,11 +373,6 @@ export default function RentalsNewPage() {
           </div>
         </div>
 
-        {errorMsg && (
-          <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)', padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#b91c1c', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <AlertCircle size={15} />{errorMsg}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 

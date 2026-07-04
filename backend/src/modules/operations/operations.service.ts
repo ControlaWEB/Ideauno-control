@@ -6,6 +6,7 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../notifications/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class OperationsService {
@@ -13,6 +14,7 @@ export class OperationsService {
     private databaseService: DatabaseService,
     private auditService: AuditService,
     private emailService: EmailService,
+    private notificationsService: NotificationsService,
   ) {}
 
   /* ─── Helpers ─── */
@@ -444,6 +446,16 @@ export class OperationsService {
       details: { operationId: id, type: tipoOp, montoComision },
     });
 
+    if (advisorId) {
+      await this.notificationsService.createForAdvisor({
+        advisorId,
+        type: 'OPERATION_CREATED',
+        title: 'Nueva operación registrada',
+        body: `Se registró tu operación ${code} (${tipoOp})${montoComision > 0 ? ` · comisión estimada ${new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(montoComision)}` : ''}.`,
+        entityId: id,
+      });
+    }
+
     return { id, code, status: statusInicial, commBreakdown };
   }
 
@@ -555,6 +567,13 @@ export class OperationsService {
       `Comisión liberada: ${commissionId}`,
       `<p>Tu comisión <strong>${commissionId}</strong> fue liberada. Ya puedes solicitar tu pago.</p>`,
     );
+    await this.notificationsService.createForAdvisor({
+      advisorId: comm.advisor_id,
+      type: 'COMMISSION_RELEASED',
+      title: 'Comisión liberada',
+      body: `Tu comisión ${commissionId} fue liberada. Ya puedes solicitar tu pago.`,
+      entityId: commissionId,
+    });
     return { id: commissionId, estatus_comision: 'Liberada' };
   }
 
@@ -587,6 +606,13 @@ export class OperationsService {
       `Comisión bloqueada: ${commissionId}`,
       `<p>Tu comisión <strong>${commissionId}</strong> fue bloqueada.</p><p><strong>Motivo:</strong> ${motivo}</p>`,
     );
+    await this.notificationsService.createForAdvisor({
+      advisorId: rows[0].advisor_id,
+      type: 'COMMISSION_BLOCKED',
+      title: 'Comisión bloqueada',
+      body: `Tu comisión ${commissionId} fue bloqueada. Motivo: ${motivo}`,
+      entityId: commissionId,
+    });
     return { id: commissionId, estatus_comision: 'Bloqueada' };
   }
 
@@ -618,6 +644,13 @@ export class OperationsService {
       `Comisión desbloqueada: ${commissionId}`,
       `<p>Tu comisión <strong>${commissionId}</strong> fue desbloqueada y sigue su proceso normal.</p>`,
     );
+    await this.notificationsService.createForAdvisor({
+      advisorId: rows[0].advisor_id,
+      type: 'COMMISSION_UNBLOCKED',
+      title: 'Comisión desbloqueada',
+      body: `Tu comisión ${commissionId} fue desbloqueada y sigue su proceso normal.`,
+      entityId: commissionId,
+    });
     return { id: commissionId, estatus_comision: 'Calculada' };
   }
 
@@ -684,6 +717,13 @@ export class OperationsService {
         `Operación cancelada: ${id}`,
         `<p>Tu operación <strong>${id}</strong> fue cancelada.</p><p><strong>Motivo:</strong> ${motivo}</p>`,
       );
+      await this.notificationsService.createForAdvisor({
+        advisorId: commRows[0].advisor_id,
+        type: 'OPERATION_CANCELLED',
+        title: 'Operación cancelada',
+        body: `Tu operación ${id} fue cancelada. Motivo: ${motivo}`,
+        entityId: id,
+      });
     }
 
     return this.findOne(id);

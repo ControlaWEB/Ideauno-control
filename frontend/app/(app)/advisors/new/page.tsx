@@ -16,8 +16,9 @@ import { useHasAccess, AccessDenied } from '@/components/access-guard';
 import {
   zNombre, zEmail, zEmailOpcional, zTelefono, zTelefonoOpcional,
   zRfcOpcional, zCurpOpcional, zFechaNoFutura, MAX_TEXTO_LARGO,
-  soloDigitos, getApiErrorMessage,
+  soloDigitos,
 } from '@/lib/validators';
+import { notify } from '@/lib/toast';
 
 const ALLOWED_ROLES = ['Super Admin', 'Admin'];
 
@@ -112,7 +113,6 @@ export default function NewAdvisorPage() {
   const [success, setSuccess]         = useState(false);
   const [createdEmail, setCreatedEmail] = useState('');
   const [tempPassword, setTempPassword] = useState('');
-  const [errorMsg, setErrorMsg]       = useState<string | null>(null);
   const [uploading, setUploading]     = useState(false);
   const [files, setFiles]             = useState<Partial<Record<FileKey, File>>>({});
   const fileRefs = useRef<Partial<Record<FileKey, HTMLInputElement>>>({});
@@ -148,7 +148,6 @@ export default function NewAdvisorPage() {
   };
 
   const onSubmit = async (data: FormData) => {
-    setErrorMsg(null);
     try {
       const res = await advisorsApi.create({
         name:                data.name,
@@ -185,9 +184,10 @@ export default function NewAdvisorPage() {
       setCreatedEmail(data.email);
       setTempPassword(res.data?.tempPassword ?? '');
       setSuccess(true);
+      notify.success('Asesor registrado correctamente.');
       setTimeout(() => router.push('/advisors'), 8000);
-    } catch (err: unknown) {
-      setErrorMsg(getApiErrorMessage(err, 'Error al registrar asesor. Intenta de nuevo.'));
+    } catch {
+      // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setUploading(false);
     }
@@ -256,16 +256,6 @@ export default function NewAdvisorPage() {
             <p className="page-desc">Registro completo de nuevo integrante del equipo comercial</p>
           </div>
         </div>
-
-        {errorMsg && (
-          <div style={{
-            background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 'var(--radius-md)',
-            padding: '12px 16px', marginBottom: 20, fontSize: 13, color: '#b91c1c',
-            display: 'flex', alignItems: 'center', gap: 8,
-          }}>
-            <AlertCircle size={15} /> {errorMsg}
-          </div>
-        )}
 
         <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
