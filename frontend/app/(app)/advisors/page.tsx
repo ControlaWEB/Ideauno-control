@@ -1,12 +1,17 @@
 'use client';
 
 import { Header } from '@/components/header';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { advisorsApi, dashboardApi } from '@/lib/api';
+import { notify } from '@/lib/toast';
+import { useAuthStore } from '@/store/auth.store';
 import { getInitials, formatCurrency, formatDate } from '@/lib/utils';
 import { useState } from 'react';
 import { Plus, Search, Eye, Users, TrendingUp, Award } from 'lucide-react';
 import { useRouter } from 'next/navigation';
+
+const ADVISOR_STATUSES = ['Activo', 'En mentoría', 'Inactivo', 'Baja definitiva', 'Fallecido'];
+const ADMIN_ROLES = ['Super Admin', 'Admin'];
 
 const STATUS_MAP: Record<string, { label: string; class: string }> = {
   Activo:           { label: 'Activo',           class: 'badge-success' },
@@ -26,6 +31,27 @@ type Advisor = {
 function AdvisorModal({ advisor, onClose, amaMap }: { advisor: Advisor; onClose: () => void; amaMap: Record<string, any> }) {
   const s = STATUS_MAP[advisor.status] ?? { label: advisor.status, class: 'badge-neutral' };
   const ama = amaMap[advisor.id];
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const canEdit = ADMIN_ROLES.includes(user?.role ?? '');
+  const [newStatus, setNewStatus] = useState(advisor.status);
+  const [saving, setSaving] = useState(false);
+
+  const handleSaveStatus = async () => {
+    if (newStatus === advisor.status) return;
+    setSaving(true);
+    try {
+      await advisorsApi.updateStatus(advisor.id, newStatus);
+      await queryClient.invalidateQueries({ queryKey: ['advisors'] });
+      await queryClient.invalidateQueries({ queryKey: ['dashboard-charts'] });
+      notify.success(`Estatus cambiado a "${newStatus}".`);
+      onClose();
+    } catch {
+      // el interceptor de axios ya muestra el toast de error
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -75,6 +101,30 @@ function AdvisorModal({ advisor, onClose, amaMap }: { advisor: Advisor; onClose:
               <span style={{ fontWeight: 700, color: ama.ama_alcanzada ? '#059669' : undefined }}>
                 {ama.estatus_ama}
               </span>
+            </div>
+          </div>
+        )}
+
+        {canEdit && (
+          <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--color-outline-variant)' }}>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8, color: 'var(--color-primary)' }}>Cambio de Estatus</div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                className="select"
+                style={{ flex: 1, minWidth: 180, height: 38 }}
+                value={newStatus}
+                onChange={e => setNewStatus(e.target.value)}
+              >
+                {ADVISOR_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+              </select>
+              <button
+                className="btn btn-primary"
+                disabled={saving || newStatus === advisor.status}
+                style={{ opacity: (saving || newStatus === advisor.status) ? 0.6 : 1 }}
+                onClick={handleSaveStatus}
+              >
+                {saving ? 'Guardando...' : 'Guardar estatus'}
+              </button>
             </div>
           </div>
         )}
