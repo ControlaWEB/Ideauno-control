@@ -15,6 +15,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsIn,
   IsInt,
@@ -26,6 +28,7 @@ import {
   MaxLength,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
@@ -360,6 +363,32 @@ class UpdatePropertyDto extends CreatePropertyDto {
   @IsOptional() declare price: number;
 }
 
+class CopropietarioItemDto {
+  @IsOptional()
+  @Transform(trim)
+  @MaxLength(MAX_NOMBRE)
+  nombre?: string;
+
+  @Type(() => Number)
+  @IsInt({ message: 'El orden debe ser un entero.' })
+  @Min(1)
+  @Max(50)
+  orden: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  documentoIneId?: string;
+}
+
+class SaveCopropietariosDto {
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => CopropietarioItemDto)
+  copropietarios: CopropietarioItemDto[];
+}
+
 class UpdatePropertyStatusDto {
   @IsNotEmpty({ message: 'El estatus es requerido.' })
   @IsIn(PROPERTY_STATUSES, {
@@ -418,6 +447,15 @@ export class PropertiesController {
   @Post()
   async create(@Body() body: CreatePropertyDto) {
     return this.propertiesService.create(body as Record<string, any>);
+  }
+
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.ASESOR)
+  @Post(':id/copropietarios')
+  async saveCopropietarios(
+    @Param('id') id: string,
+    @Body() body: SaveCopropietariosDto,
+  ) {
+    return this.propertiesService.saveCopropietarios(id, body.copropietarios);
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)

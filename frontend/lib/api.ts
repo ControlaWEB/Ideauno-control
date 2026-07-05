@@ -94,6 +94,10 @@ export const propertiesApi = {
   getAll: (params?: Record<string, unknown>) => api.get('/properties', { params }),
   getOne: (id: string) => api.get(`/properties/${id}`),
   create: (data: Record<string, unknown>) => api.post('/properties', data),
+  saveCopropietarios: (
+    id: string,
+    copropietarios: { nombre?: string; orden: number; documentoIneId?: string }[],
+  ) => api.post(`/properties/${id}/copropietarios`, { copropietarios }),
   update: (id: string, data: Record<string, unknown>) => api.patch(`/properties/${id}`, data),
   updateStatus: (id: string, status: string) => api.patch(`/properties/${id}/status`, { status }),
   delete: (id: string) => api.delete(`/properties/${id}`),

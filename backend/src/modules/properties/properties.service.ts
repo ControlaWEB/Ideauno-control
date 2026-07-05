@@ -87,7 +87,48 @@ export class PropertiesService {
     if (rows.length === 0) {
       throw new NotFoundException(`Propiedad con ID ${id} no encontrada.`);
     }
-    return rows[0];
+    // Copropietarios con su documento INE ligado (trazabilidad fuerte)
+    const copropietarios = await this.databaseService.query<any>(
+      `SELECT cp.id, cp.nombre, cp.orden, cp.documento_ine_id,
+              d.nombre_archivo AS ine_nombre_archivo, d.estatus_documento AS ine_estatus
+       FROM public.copropietarios cp
+       LEFT JOIN public.dim_documentos d ON d.id = cp.documento_ine_id
+       WHERE cp.property_id = @id
+       ORDER BY cp.orden ASC`,
+      { id },
+    );
+    return { ...rows[0], copropietarios_detalle: copropietarios };
+  }
+
+  // Reemplaza el listado de copropietarios de una propiedad, ligando cada uno
+  // a su documento INE en dim_documentos. Idempotente: borra y reinserta.
+  async saveCopropietarios(
+    propertyId: string,
+    lista: { nombre?: string; orden: number; documentoIneId?: string }[],
+  ) {
+    await this.findOne(propertyId); // valida existencia (404 si no)
+
+    await this.databaseService.query(
+      `DELETE FROM public.copropietarios WHERE property_id = @propertyId`,
+      { propertyId },
+    );
+
+    for (const item of lista) {
+      const id = 'cop-' + Math.random().toString(36).substring(2, 11);
+      await this.databaseService.query(
+        `INSERT INTO public.copropietarios (id, property_id, nombre, orden, documento_ine_id)
+         VALUES (@id, @propertyId, @nombre, @orden, @documentoIneId)`,
+        {
+          id,
+          propertyId,
+          nombre: item.nombre || '',
+          orden: item.orden,
+          documentoIneId: item.documentoIneId || null,
+        },
+      );
+    }
+
+    return { success: true, total: lista.length };
   }
 
   async create(dto: Record<string, any>) {

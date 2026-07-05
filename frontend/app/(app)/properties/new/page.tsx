@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { propertiesApi, uploadDocuments } from '@/lib/api';
+import { propertiesApi, uploadDocuments, documentsApi } from '@/lib/api';
 import { useAuthStore } from '@/store/auth.store';
-import { useState, useRef, ChangeEvent } from 'react';
+import { useState, useRef, useEffect, ChangeEvent } from 'react';
 import {
   ArrowLeft, CheckCircle, User, FileText, Building2, DollarSign,
   Camera, Shield, Upload, X, AlertCircle, Home,
@@ -179,7 +179,7 @@ function FieldError({ msg }: { msg?: string }) {
 }
 
 function FileSlot({ label, required, fileKey, file, onPick, onRemove }: {
-  label: string; required?: boolean; fileKey: FileKey;
+  label: string; required?: boolean; fileKey?: string;
   file?: File; onPick: () => void; onRemove: () => void;
 }) {
   return (
@@ -224,6 +224,13 @@ export default function NewPropertyPage() {
   const [files, setFiles]       = useState<Partial<Record<FileKey, File>>>({});
   const fileRefs = useRef<Partial<Record<FileKey, HTMLInputElement>>>({});
 
+  // Copropietarios adicionales: cuántos + una INE por cada uno
+  const [numCoowners, setNumCoowners]   = useState(0);
+  const [coownerNames, setCoownerNames] = useState<string[]>([]);
+  const [coownerFiles, setCoownerFiles] = useState<(File | undefined)[]>([]);
+  const [coownerError, setCoownerError] = useState('');
+  const coownerRefs = useRef<(HTMLInputElement | null)[]>([]);
+
   const {
     register, handleSubmit, control, setValue, watch,
     formState: { errors, isSubmitting },
@@ -261,17 +268,67 @@ export default function NewPropertyPage() {
   };
   const pickFile = (key: FileKey) => fileRefs.current[key]?.click();
 
+  // Ajusta el número de copropietarios y redimensiona nombres/archivos
+  const setCoownerCount = (raw: string) => {
+    const n = Math.max(0, Math.min(20, Math.floor(Number(raw) || 0)));
+    setNumCoowners(n);
+    setCoownerNames((prev) => Array.from({ length: n }, (_, i) => prev[i] ?? ''));
+    setCoownerFiles((prev) => Array.from({ length: n }, (_, i) => prev[i]));
+    setCoownerError('');
+  };
+  const setCoownerName = (i: number, v: string) =>
+    setCoownerNames((prev) => { const n = [...prev]; n[i] = v; return n; });
+  const handleCoownerFile = (i: number) => (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) setCoownerFiles((prev) => { const n = [...prev]; n[i] = f; return n; });
+  };
+  const removeCoownerFile = (i: number) => {
+    setCoownerFiles((prev) => { const n = [...prev]; n[i] = undefined; return n; });
+    if (coownerRefs.current[i]) coownerRefs.current[i]!.value = '';
+  };
+
+  // Si cambia a "No", limpia todo el bloque de copropietarios
+  useEffect(() => {
+    if (coprop === 'no') {
+      setNumCoowners(0);
+      setCoownerNames([]);
+      setCoownerFiles([]);
+      setCoownerError('');
+    }
+  }, [coprop]);
+
   const toggleFormaPago = (v: string) => {
     const curr = formasPago;
     setValue('formasPago', curr.includes(v) ? curr.filter(x => x !== v) : [...curr, v], { shouldValidate: true });
   };
 
   const onSubmit = async (data: any) => {
+    // Validación de copropietarios: exige cantidad + una INE por cada uno
+    if (data.tieneCopropietarios === 'si') {
+      if (numCoowners < 1) {
+        setCoownerError('Indica cuántos propietarios adicionales hay (mínimo 1).');
+        return;
+      }
+      const missing = coownerFiles.slice(0, numCoowners).findIndex((f) => !f);
+      if (missing !== -1) {
+        setCoownerError(`Falta la INE del propietario adicional #${missing + 1}.`);
+        return;
+      }
+      setCoownerError('');
+    }
+
+    // Detalle de copropietarios (nombres) que se persiste como JSON
+    const copropietarios =
+      data.tieneCopropietarios === 'si'
+        ? coownerNames.slice(0, numCoowners).map((nombre) => ({ nombre: (nombre ?? '').trim() }))
+        : [];
+
     try {
       const res = await propertiesApi.create({
         ...data,
         advisorId: user?.advisorId ?? user?.id,
         tieneCopropietarios: data.tieneCopropietarios === 'si',
+        copropietarios: JSON.stringify(copropietarios),
         provieneHerencia: data.provieneHerencia === 'si',
         adjudicacionConcluida: data.adjudicacionConcluida === 'si',
         esNegociable: data.esNegociable === 'si',
@@ -283,20 +340,43 @@ export default function NewPropertyPage() {
       } as Record<string, unknown>);
 
       const propertyId = res.data?.id;
-      if (propertyId && Object.keys(files).length > 0) {
-        setUploading(true);
-        await uploadDocuments(files, {
-          owner_ine:        'ine_propietario',
-          escritura:        'escritura',
-          predial:          'predial',
-          agua:             'agua',
-          luz:              'luz',
-          avaluo:           'avaluo',
-          acta_matrimonio:  'acta_matrimonio',
-          poder_notarial:   'poder_notarial',
-          fotos:            'fotografia',
-          contrato_comision:'contrato_comision',
-        }, 'propiedad', propertyId);
+
+      if (propertyId) {
+        // 1) Documentos generales de la propiedad
+        if (Object.keys(files).length > 0) {
+          setUploading(true);
+          await uploadDocuments(files, {
+            owner_ine:        'ine_propietario',
+            escritura:        'escritura',
+            predial:          'predial',
+            agua:             'agua',
+            luz:              'luz',
+            avaluo:           'avaluo',
+            acta_matrimonio:  'acta_matrimonio',
+            poder_notarial:   'poder_notarial',
+            fotos:            'fotografia',
+            contrato_comision:'contrato_comision',
+          }, 'propiedad', propertyId);
+        }
+
+        // 2) INE de cada copropietario: subir → capturar id del documento →
+        //    ligarlo en la tabla copropietarios (trazabilidad nombre ↔ INE)
+        if (data.tieneCopropietarios === 'si' && numCoowners > 0) {
+          setUploading(true);
+          const lista: { nombre?: string; orden: number; documentoIneId?: string }[] = [];
+          for (let i = 0; i < numCoowners; i++) {
+            const f = coownerFiles[i];
+            let documentoIneId: string | undefined;
+            if (f) {
+              const up = await documentsApi.uploadFile(
+                f, 'propiedad', propertyId, `ine_copropietario_${i + 1}`,
+              );
+              documentoIneId = up.data?.id;
+            }
+            lista.push({ nombre: (coownerNames[i] ?? '').trim(), orden: i + 1, documentoIneId });
+          }
+          await propertiesApi.saveCopropietarios(propertyId, lista);
+        }
       }
 
       setSuccess(true);
@@ -463,6 +543,39 @@ export default function NewPropertyPage() {
                 ))}
               </div>
             </div>
+
+            {coprop === 'si' && (
+              <div style={{ marginTop: 14, padding: 14, background: 'var(--color-surface-variant)', borderRadius: 'var(--radius-md)', display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <div className="input-group" style={{ maxWidth: 280 }}>
+                  <label className="input-label">¿Cuántos propietarios adicionales hay? *</label>
+                  <input type="number" min={1} max={20} step={1} inputMode="numeric" className="input"
+                    value={numCoowners || ''} onChange={(e) => setCoownerCount(e.target.value)} placeholder="Ej: 2" />
+                  <p style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 4 }}>
+                    Sin contar al propietario principal. Se pedirá una INE por cada uno.
+                  </p>
+                </div>
+
+                {Array.from({ length: numCoowners }).map((_, i) => (
+                  <div key={i} style={{ borderTop: '1px dashed var(--color-outline-variant)', paddingTop: 12 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 8 }}>
+                      Propietario adicional #{i + 1}
+                    </div>
+                    <div className="input-group" style={{ marginBottom: 10 }}>
+                      <label className="input-label">Nombre completo</label>
+                      <input className="input" value={coownerNames[i] ?? ''}
+                        onChange={(e) => setCoownerName(i, e.target.value)} placeholder="Nombre del copropietario" />
+                    </div>
+                    <FileSlot label={`INE vigente — propietario #${i + 1}`} required
+                      fileKey={`copropietario_ine_${i + 1}`} file={coownerFiles[i]}
+                      onPick={() => coownerRefs.current[i]?.click()} onRemove={() => removeCoownerFile(i)} />
+                    <input ref={(el) => { coownerRefs.current[i] = el; }} type="file"
+                      accept=".pdf,.jpg,.jpeg,.png" onChange={handleCoownerFile(i)} style={{ display: 'none' }} />
+                  </div>
+                ))}
+
+                {coownerError && <FieldError msg={coownerError} />}
+              </div>
+            )}
 
             <div className="input-group" style={{ marginTop: 18 }}>
               <label className="input-label">¿Quién está realizando la venta? *</label>
