@@ -464,7 +464,14 @@ export class DashboardService {
   }
 
   async getComisionPorMes(filters: DashboardFilters = {}) {
-    const op = this.opFilter(filters, { estatus: true });
+    // Alias 'o' obligatorio: la query hace JOIN con commissions (que también
+    // tiene advisor_id), así que el filtro por asesor debe calificarse con o.
+    const op = this.opFilterAliased('o', filters, { estatus: true });
+    const advisorClause = filters.idAsesor ? 'AND o.advisor_id = @fIdAsesor' : '';
+    const params = {
+      ...op.params,
+      ...(filters.idAsesor ? { fIdAsesor: filters.idAsesor } : {}),
+    };
     const rows = await this.databaseService.query<any>(
       `
       SELECT TO_CHAR(o.fecha_cierre, 'YYYY-MM') as mes,
@@ -473,11 +480,11 @@ export class DashboardService {
              COUNT(o.id) as operaciones
       FROM public.operations o
       LEFT JOIN public.commissions c ON c.operation_id = o.id AND c.type = 'cierre'
-      WHERE o.status != 'Cancelado' AND o.fecha_cierre IS NOT NULL ${op.sql}
+      WHERE o.status != 'Cancelado' AND o.fecha_cierre IS NOT NULL ${op.sql} ${advisorClause}
       GROUP BY TO_CHAR(o.fecha_cierre, 'YYYY-MM')
       ORDER BY mes ASC
       `,
-      op.params,
+      params,
     );
     return rows.map((r: any) => ({
       mes: r.mes,
