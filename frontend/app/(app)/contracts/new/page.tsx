@@ -14,6 +14,7 @@ import {
   MAX_MONTO, MAX_TEXTO_LARGO, soloDigitos,
 } from '@/lib/validators';
 import { notify } from '@/lib/toast';
+import { notifyFormErrors } from '@/lib/upload';
 
 /* ─── Piezas numéricas ─── */
 const zNumOpcional = (max: number, msg = 'Ingresa un monto válido.') =>
@@ -429,7 +430,7 @@ export default function NewContractPage() {
         </div>
 
 
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* ─── Datos generales ─── */}
           <div className="card">

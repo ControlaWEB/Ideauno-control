@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth.store';
 import { authApi } from '@/lib/api';
 import { Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { notifyFormErrors } from '@/lib/upload';
 
 /* ── Schema ── */
 const schema = z.object({
@@ -163,7 +164,7 @@ export default function LoginPage() {
       )}
 
       {/* ── Form ── */}
-      <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} noValidate>
         {/* Email */}
         <div style={{ marginBottom: 20 }}>
           <label htmlFor="email" style={S.label}>Correo electrónico</label>

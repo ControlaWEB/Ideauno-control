@@ -9,6 +9,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { Users, Plus, X } from 'lucide-react';
 import { TELEFONO_MX, RFC_RE, MAX_NOMBRE, soloDigitos } from '@/lib/validators';
 import { notify } from '@/lib/toast';
+import { notifyFormErrors } from '@/lib/upload';
 
 const CREATE_ROLES = ['Super Admin', 'Admin', 'Asesor'];
 
@@ -110,7 +111,7 @@ export default function ClientsPage() {
                 <X size={16} />
               </button>
             </div>
-            <form onSubmit={handleSubmit(onSubmit)} noValidate>
+            <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} noValidate>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
 
                 {/* Nombre */}
