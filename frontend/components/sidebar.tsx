@@ -28,6 +28,7 @@ import { useRouter } from 'next/navigation';
 const SUPER_ADMIN = 'Super Admin';
 const ADMIN = 'Admin';
 const ASESOR = 'Asesor';
+const JURIDICO = 'Jurídico';
 
 type NavLink = { label: string; href: string; icon: React.ElementType; roles?: string[] };
 
@@ -53,7 +54,9 @@ const NAV_OPERACIONES: NavLink[] = [
 ];
 
 const NAV_JURIDICO: NavLink[] = [
-  { label: 'Contratos', href: '/contracts', icon: ScrollText },
+  // Bandeja de solicitudes de contrato del área jurídica: no la ve el asesor.
+  { label: 'Contratos', href: '/contracts', icon: ScrollText, roles: [SUPER_ADMIN, ADMIN, JURIDICO] },
+  // El asesor sí puede levantar una solicitud de contrato.
   { label: 'Nueva Solicitud', href: '/contracts/new', icon: PlusCircle },
 ];
 
