@@ -6,7 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { advisorsApi, uploadDocuments } from '@/lib/api';
-import { checkDocSize } from '@/lib/upload';
+import { checkDocSize, ensureRequiredDocs, notifyFormErrors } from '@/lib/upload';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useRef, ChangeEvent } from 'react';
 import {
@@ -151,6 +151,10 @@ export default function NewAdvisorPage() {
   };
 
   const onSubmit = async (data: FormData) => {
+    // Documentos obligatorios (marcados con * en DOC_SLOTS)
+    const requiredDocs = DOC_SLOTS.filter((s) => s.required).map((s) => ({ key: s.key, label: s.label }));
+    if (!ensureRequiredDocs(files as Record<string, File | undefined>, requiredDocs)) return;
+
     try {
       const res = await advisorsApi.create({
         name:                data.name,
@@ -260,7 +264,7 @@ export default function NewAdvisorPage() {
           </div>
         </div>
 
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* ─── S1: Datos Generales ─── */}
           <div className="card">

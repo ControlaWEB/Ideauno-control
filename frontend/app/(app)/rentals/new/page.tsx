@@ -6,7 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { propertiesApi, uploadDocuments } from '@/lib/api';
-import { checkDocSize } from '@/lib/upload';
+import { checkDocSize, ensureRequiredDocs, notifyFormErrors } from '@/lib/upload';
 import { useAuthStore } from '@/store/auth.store';
 import { useState, useRef, ChangeEvent } from 'react';
 import {
@@ -250,6 +250,20 @@ export default function RentalsNewPage() {
   };
 
   const onSubmit = async (data: any) => {
+    // Documentos obligatorios (marcados con *)
+    const requiredDocs = [
+      { key: 'owner_ine', label: 'INE del propietario' },
+      { key: 'doc_propiedad', label: 'documento que acredita la propiedad (escritura)' },
+      { key: 'fotos', label: 'fotografías del inmueble' },
+    ];
+    if (quienContrata && quienContrata !== 'Propietario') {
+      requiredDocs.push({ key: 'poder_notarial', label: 'documento legal (poder / representación)' });
+    }
+    if (contrato === 'si') {
+      requiredDocs.push({ key: 'contrato_comision', label: 'Contrato de Comisión Mercantil firmado' });
+    }
+    if (!ensureRequiredDocs(files as Record<string, File | undefined>, requiredDocs)) return;
+
     try {
       const res = await propertiesApi.create({
         // Campos comunes (camelCase, mismos que el DTO CreatePropertyDto)
@@ -377,7 +391,7 @@ export default function RentalsNewPage() {
         </div>
 
 
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* ─── S1: Propietario ─── */}
           <div className="card">

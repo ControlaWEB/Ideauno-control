@@ -6,7 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { operationsApi, propertiesApi, advisorsApi, uploadDocuments, templatesApi } from '@/lib/api';
-import { checkDocSize } from '@/lib/upload';
+import { checkDocSize, ensureRequiredDocs, notifyFormErrors } from '@/lib/upload';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useRef, ChangeEvent } from 'react';
 import { formatCurrency } from '@/lib/utils';
@@ -246,6 +246,24 @@ export default function NewOperationPage() {
   const pldFlag = precio >= 941412.75;
 
   const onSubmit = async (data: any) => {
+    // Documentos obligatorios (marcados con *)
+    const requiredDocs = [
+      { key: 'doc_cierre', label: 'documento de cierre' },
+      { key: 'kyc', label: 'Formato KYC firmado' },
+      { key: 'pld_hoja', label: 'Hoja de Reporte y Entrega Expediente PLD' },
+      { key: 'identificacion', label: 'identificación oficial' },
+      { key: 'rfc_doc', label: 'RFC o Constancia de Situación Fiscal' },
+      { key: 'curp_doc', label: 'CURP' },
+      { key: 'domicilio', label: 'comprobante de domicilio' },
+    ];
+    if (pldTipo === 'Persona moral') {
+      requiredDocs.push(
+        { key: 'acta_constitutiva', label: 'acta constitutiva' },
+        { key: 'poder_rep', label: 'poder del representante legal' },
+      );
+    }
+    if (!ensureRequiredDocs(files as Record<string, File | undefined>, requiredDocs)) return;
+
     try {
       const res = await operationsApi.create({
         tipoOperacion:          data.tipoOperacion,
@@ -375,7 +393,7 @@ export default function NewOperationPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* ─── S1: Origen ─── */}
           <div className="card">

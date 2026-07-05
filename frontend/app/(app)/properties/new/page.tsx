@@ -6,7 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { propertiesApi, uploadDocuments, documentsApi } from '@/lib/api';
-import { checkDocSize } from '@/lib/upload';
+import { checkDocSize, ensureRequiredDocs, notifyFormErrors } from '@/lib/upload';
 import { useAuthStore } from '@/store/auth.store';
 import { useState, useRef, useEffect, ChangeEvent } from 'react';
 import {
@@ -308,15 +308,33 @@ export default function NewPropertyPage() {
   };
 
   const onSubmit = async (data: any) => {
+    // Documentos obligatorios (marcados con *)
+    const requiredDocs = [
+      { key: 'owner_ine', label: 'INE del propietario' },
+      { key: 'escritura', label: 'documento que acredita la propiedad (escritura)' },
+      { key: 'fotos', label: 'fotografías del inmueble' },
+    ];
+    if (quienVende && quienVende !== 'Propietario') {
+      requiredDocs.push({ key: 'poder_notarial', label: 'documento legal (poder / representación / adjudicación)' });
+    }
+    if (data.contratoComisionFirmado === 'si') {
+      requiredDocs.push({ key: 'contrato_comision', label: 'Contrato de Comisión Mercantil firmado' });
+    }
+    if (!ensureRequiredDocs(files as Record<string, File | undefined>, requiredDocs)) return;
+
     // Validación de copropietarios: exige cantidad + una INE por cada uno
     if (data.tieneCopropietarios === 'si') {
       if (numCoowners < 1) {
-        setCoownerError('Indica cuántos propietarios adicionales hay (mínimo 1).');
+        const msg = 'Indica cuántos propietarios adicionales hay (mínimo 1).';
+        setCoownerError(msg);
+        notify.error(msg);
         return;
       }
       const missing = coownerFiles.slice(0, numCoowners).findIndex((f) => !f);
       if (missing !== -1) {
-        setCoownerError(`Falta la INE del propietario adicional #${missing + 1}.`);
+        const msg = `Falta la INE del propietario adicional #${missing + 1}.`;
+        setCoownerError(msg);
+        notify.error(msg);
         return;
       }
       setCoownerError('');
@@ -436,7 +454,7 @@ export default function NewPropertyPage() {
         </div>
 
 
-        <form onSubmit={handleSubmit(onSubmit)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
           {/* ─── S1: Propietario ─── */}
           <div className="card">
