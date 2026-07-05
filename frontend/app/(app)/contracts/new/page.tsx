@@ -251,8 +251,8 @@ export default function NewContractPage() {
         cliente_estado_civil:              data.clienteTipo === 'Persona física' ? (data.clienteEstadoCivil ?? '') : '',
         cliente_regimen_patrimonial:       data.clienteRegimenPatrimonial ?? '',
         cliente_nombre_conyuge:            data.clienteNombreConyuge ?? '',
-        // Compraventa
-        formas_pago:                       formasPago,
+        // Compraventa — el backend espera texto, no arreglo
+        formas_pago:                       formasPago.join(', '),
         monto_apartado:                    data.montoApartado ?? null,
         fecha_estimada_escritura:          data.fechaEstimadaEscritura ?? '',
         // Arrendamiento
