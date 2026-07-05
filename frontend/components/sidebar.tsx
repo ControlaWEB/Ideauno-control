@@ -32,7 +32,9 @@ const ASESOR = 'Asesor';
 type NavLink = { label: string; href: string; icon: React.ElementType; roles?: string[] };
 
 const NAV_PRINCIPAL: NavLink[] = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  // El dashboard solo tiene vista para Admin/Super (administrativo) y Asesor (Mi Dashboard).
+  // Jurídico no tiene dashboard, por eso se oculta para ese rol.
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: [SUPER_ADMIN, ADMIN, ASESOR] },
   { label: 'Guía de Uso', href: '/guia', icon: BookOpen },
 ];
 
@@ -56,7 +58,8 @@ const NAV_JURIDICO: NavLink[] = [
 ];
 
 const NAV_EQUIPO: NavLink[] = [
-  { label: 'Asesores', href: '/advisors', icon: Users },
+  // Gestión de asesores es solo administrativa (la página usa métricas admin-only).
+  { label: 'Asesores', href: '/advisors', icon: Users, roles: [SUPER_ADMIN, ADMIN] },
   { label: 'Nuevo Asesor', href: '/advisors/new', icon: PlusCircle, roles: [SUPER_ADMIN, ADMIN] },
   { label: 'Clientes', href: '/clients', icon: UserCheck },
 ];
