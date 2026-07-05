@@ -6,6 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { propertiesApi, uploadDocuments, documentsApi } from '@/lib/api';
+import { checkDocSize } from '@/lib/upload';
 import { useAuthStore } from '@/store/auth.store';
 import { useState, useRef, useEffect, ChangeEvent } from 'react';
 import {
@@ -137,7 +138,7 @@ type FileKey =
   | 'avaluo' | 'acta_matrimonio' | 'poder_notarial'
   | 'fotos' | 'contrato_comision';
 
-const FORMAS_PAGO_OPTS = ['Contado', 'Crédito bancario', 'Infonavit', 'Fovissste', 'Cofinavit', 'Todas las anteriores'];
+const FORMAS_PAGO_OPTS = ['Contado', 'Crédito bancario', 'Infonavit', 'Fovissste', 'Cofinavit', 'Todas las anteriores', 'Otro'];
 const TIPOS_INMUEBLE = ['Casa', 'Departamento', 'Terreno', 'Local comercial', 'Oficina', 'Bodega', 'Nave industrial', 'Rancho', 'Otro'];
 const ESTADOS_CIVIL = ['Soltero(a)', 'Casado(a)', 'Divorciado(a)', 'Viudo(a)', 'Unión libre'];
 const ESTADOS_CONSERVACION = ['Excelente', 'Bueno', 'Regular', 'Requiere remodelación'];
@@ -260,7 +261,9 @@ export default function NewPropertyPage() {
 
   const handleFile = (key: FileKey) => (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) setFiles(p => ({ ...p, [key]: f }));
+    if (!f) return;
+    if (!checkDocSize(f, key)) { e.target.value = ''; return; }
+    setFiles(p => ({ ...p, [key]: f }));
   };
   const removeFile = (key: FileKey) => {
     setFiles(p => { const n = { ...p }; delete n[key]; return n; });
@@ -280,7 +283,9 @@ export default function NewPropertyPage() {
     setCoownerNames((prev) => { const n = [...prev]; n[i] = v; return n; });
   const handleCoownerFile = (i: number) => (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) setCoownerFiles((prev) => { const n = [...prev]; n[i] = f; return n; });
+    if (!f) return;
+    if (!checkDocSize(f, 'ine')) { e.target.value = ''; return; }
+    setCoownerFiles((prev) => { const n = [...prev]; n[i] = f; return n; });
   };
   const removeCoownerFile = (i: number) => {
     setCoownerFiles((prev) => { const n = [...prev]; n[i] = undefined; return n; });
@@ -607,6 +612,7 @@ export default function NewPropertyPage() {
               <label className="input-label" style={{ display: 'block', marginBottom: 8 }}>Documento que acredita la propiedad *</label>
               <FileSlot label="Escritura / Título / Otro" required fileKey="escritura" file={files.escritura} onPick={() => pickFile('escritura')} onRemove={() => removeFile('escritura')} />
               <input ref={el => { if (el) fileRefs.current.escritura = el; }} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleFile('escritura')} style={{ display: 'none' }} />
+              <p style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 6 }}>Máximo 30 MB. El resto de documentos: máximo 2 MB.</p>
             </div>
 
             {/* Predial / Agua / Luz / Avalúo en grid */}
@@ -820,7 +826,7 @@ export default function NewPropertyPage() {
 
             <div className="input-group" style={{ marginTop: 16 }}>
               <label className="input-label">Formas de pago aceptadas *</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginTop: 8 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10, marginTop: 8 }}>
                 {FORMAS_PAGO_OPTS.map(fp => {
                   const sel = formasPago.includes(fp);
                   return (
@@ -828,8 +834,9 @@ export default function NewPropertyPage() {
                       key={fp} type="button"
                       onClick={() => toggleFormaPago(fp)}
                       style={{
-                        padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 550,
-                        cursor: 'pointer', border: `1.5px solid ${sel ? 'var(--color-primary)' : '#d1d5db'}`,
+                        padding: '8px 14px', borderRadius: 20, fontSize: 12, fontWeight: 550,
+                        cursor: 'pointer', textAlign: 'center',
+                        border: `1.5px solid ${sel ? 'var(--color-primary)' : '#d1d5db'}`,
                         background: sel ? 'var(--color-primary)' : 'transparent',
                         color: sel ? '#fff' : 'var(--color-on-surface)',
                       }}
@@ -894,7 +901,6 @@ export default function NewPropertyPage() {
                     <option value="">— Seleccionar —</option>
                     <option value="Exclusiva">Exclusiva</option>
                     <option value="No exclusiva">No exclusiva</option>
-                    <option value="Verbal">Verbal</option>
                   </select>
                 </div>
               )}

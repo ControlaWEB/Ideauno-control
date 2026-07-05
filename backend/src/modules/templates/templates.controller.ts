@@ -32,7 +32,7 @@ import { MAX_NOMBRE, MAX_TEXTO_LARGO } from '../../common/validation/patterns';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
 
-const CATEGORIAS = ['KYC', 'PLD', 'Contrato', 'Otro'];
+const CATEGORIAS = ['KYC', 'PLD', 'Contrato', 'Formato', 'Otro'];
 
 class UploadTemplateDto {
   @Transform(({ value }) => (typeof value === 'string' ? value.trim() : value))

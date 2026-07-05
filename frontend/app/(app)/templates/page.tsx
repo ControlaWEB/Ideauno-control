@@ -8,8 +8,9 @@ import { useAuthStore } from '@/store/auth.store';
 import { formatDate } from '@/lib/utils';
 import { FolderOpen, Plus, Download, Trash2, Upload } from 'lucide-react';
 import { notify } from '@/lib/toast';
+import { checkFileSize, TEMPLATE_LIMIT } from '@/lib/upload';
 
-const CATEGORIAS = ['KYC', 'PLD', 'Contrato', 'Otro'];
+const CATEGORIAS = ['KYC', 'PLD', 'Contrato', 'Formato', 'Otro'];
 
 type Plantilla = {
   id: string;
@@ -33,7 +34,7 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
       notify.error('Nombre y archivo son obligatorios.');
       return;
     }
-    if (!['KYC', 'PLD', 'Contrato', 'Otro'].includes(categoria)) {
+    if (!CATEGORIAS.includes(categoria)) {
       notify.error('Categoría inválida.');
       return;
     }
@@ -75,7 +76,11 @@ function UploadModal({ onClose, onUploaded }: { onClose: () => void; onUploaded:
           </div>
           <div>
             <label className="input-label">Archivo (PDF) *</label>
-            <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => setFile(e.target.files?.[0] ?? null)} />
+            <input ref={fileRef} type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => {
+              const f = e.target.files?.[0] ?? null;
+              if (f && !checkFileSize(f, TEMPLATE_LIMIT)) { e.target.value = ''; setFile(null); return; }
+              setFile(f);
+            }} />
           </div>
           <button className="btn btn-primary" disabled={saving} onClick={submit} style={{ marginTop: 4 }}>
             <Upload size={14} /> {saving ? 'Subiendo...' : 'Subir plantilla'}

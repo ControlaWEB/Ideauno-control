@@ -6,6 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { operationsApi, propertiesApi, advisorsApi, uploadDocuments, templatesApi } from '@/lib/api';
+import { checkDocSize } from '@/lib/upload';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useRef, ChangeEvent } from 'react';
 import { formatCurrency } from '@/lib/utils';
@@ -232,7 +233,9 @@ export default function NewOperationPage() {
 
   const handleFile = (key: FileKey) => (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
-    if (f) setFiles(p => ({ ...p, [key]: f }));
+    if (!f) return;
+    if (!checkDocSize(f, key)) { e.target.value = ''; return; }
+    setFiles(p => ({ ...p, [key]: f }));
   };
   const removeFile = (key: FileKey) => {
     setFiles(p => { const n = { ...p }; delete n[key]; return n; });

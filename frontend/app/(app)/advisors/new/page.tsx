@@ -6,6 +6,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { advisorsApi, uploadDocuments } from '@/lib/api';
+import { checkDocSize } from '@/lib/upload';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useRef, ChangeEvent } from 'react';
 import {
@@ -139,7 +140,9 @@ export default function NewAdvisorPage() {
 
   const handleFileChange = (key: FileKey) => (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) setFiles(prev => ({ ...prev, [key]: file }));
+    if (!file) return;
+    if (!checkDocSize(file, key)) { e.target.value = ''; return; }
+    setFiles(prev => ({ ...prev, [key]: file }));
   };
 
   const removeFile = (key: FileKey) => {

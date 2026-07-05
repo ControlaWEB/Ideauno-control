@@ -12,6 +12,7 @@ import {
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
+  PayloadTooLargeException,
   Request,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -33,7 +34,11 @@ import {
   MAX_TEXTO_LARGO,
 } from '../../common/validation/patterns';
 
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
+// Escrituras hasta 30 MB; cualquier otro documento máximo 2 MB.
+const MAX_ESCRITURA_SIZE = 30 * 1024 * 1024; // 30 MB
+const MAX_DEFAULT_SIZE = 2 * 1024 * 1024; //  2 MB
+const limitFor = (tipoDocumento: string) =>
+  tipoDocumento === 'escritura' ? MAX_ESCRITURA_SIZE : MAX_DEFAULT_SIZE;
 
 const ENTIDADES = ['asesor', 'propiedad', 'cierre', 'cliente', 'operacion'];
 const DOC_STATUSES = ['Pendiente', 'Validado', 'Rechazado', 'Sustituido'];
@@ -83,12 +88,18 @@ export class DocumentsController {
    *   tipoDocumento — 'ine' | 'curp' | 'contrato' | etc.
    */
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: memoryStorage(),
+      // Cap absoluto de memoria = el mayor límite permitido (escritura, 50 MB).
+      limits: { fileSize: MAX_ESCRITURA_SIZE },
+    }),
+  )
   async upload(
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_FILE_SIZE }),
+          new MaxFileSizeValidator({ maxSize: MAX_ESCRITURA_SIZE }),
           new FileTypeValidator({
             fileType: /^(image\/(jpeg|jpg|png|webp)|application\/pdf)$/,
           }),
@@ -99,6 +110,14 @@ export class DocumentsController {
     @Body() body: UploadDocumentDto,
     @Request() req: any,
   ) {
+    // Límite por tipo: escritura 50 MB, el resto 2 MB.
+    const limit = limitFor(body.tipoDocumento);
+    if (file.size > limit) {
+      const mb = limit === MAX_ESCRITURA_SIZE ? '30' : '2';
+      throw new PayloadTooLargeException(
+        `El archivo excede el máximo permitido de ${mb} MB para este tipo de documento.`,
+      );
+    }
     return this.documentsService.upload(file, {
       entidad: body.entidad,
       idEntidad: body.idEntidad,
