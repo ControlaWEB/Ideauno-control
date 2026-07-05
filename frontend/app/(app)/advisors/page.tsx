@@ -228,7 +228,15 @@ export default function AdvisorsPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <div className="avatar" style={{ width: 30, height: 30, fontSize: 11 }}>{getInitials(a.name)}</div>
                           <div>
-                            <div style={{ fontWeight: 550, fontSize: 13 }}>{a.name}</div>
+                            <div
+                              onClick={() => router.push(`/advisors/${a.id}`)}
+                              title="Ver ficha del asesor"
+                              style={{ fontWeight: 550, fontSize: 13, cursor: 'pointer', color: 'var(--color-primary)' }}
+                              onMouseEnter={e => { (e.currentTarget as HTMLElement).style.textDecoration = 'underline'; }}
+                              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.textDecoration = 'none'; }}
+                            >
+                              {a.name}
+                            </div>
                             <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)' }}>{a.email}</div>
                           </div>
                         </div>
