@@ -265,6 +265,12 @@ const FAQS: Faq[] = [
     keywords: 'flujo completo proceso captacion cierre comision pago',
   },
   {
+    q: '¿Cuál es la diferencia entre “Comisiones pendientes” y “Pagos pendientes”?',
+    a: 'Son dos etapas distintas del ciclo del dinero. “Comisiones pendientes” son comisiones que todavía NO están listas para pagar: falta que un admin las revise y las libere (o desbloquee) — estados Calculada, Pendiente validación o Bloqueada. “Pagos pendientes” son comisiones YA liberadas que el asesor ya pidió cobrar, y falta que administración autorice y registre la transferencia — estados Solicitado o Autorizado. En orden: primero se libera la comisión (comisión pendiente), luego se paga lo liberado (pago pendiente).',
+    href: '/commissions', linkLabel: 'Ver Comisiones',
+    keywords: 'diferencia comisiones pendientes pagos pendientes liberar autorizar solicitar calculada liberada pagado ciclo dinero',
+  },
+  {
     q: '¿Qué es el Cumplimiento PLD?',
     a: 'Es el módulo de Prevención de Lavado de Dinero. Registra casos, verifica expedientes (RFC, identificación, PEP) y levanta alertas. Solo lo ven Super Admin y Admin.',
     href: '/compliance', linkLabel: 'Ir a Cumplimiento',
