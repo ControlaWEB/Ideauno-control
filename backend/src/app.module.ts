@@ -14,6 +14,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { TemplatesModule } from './modules/templates/templates.module';
+import { TeamsModule } from './modules/teams/teams.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { TemplatesModule } from './modules/templates/templates.module';
     ContractsModule,
     AuditModule,
     TemplatesModule,
+    TeamsModule,
   ],
   providers: [
     // Aplica el rate limiting configurado arriba a todos los endpoints

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { advisorsApi, uploadDocuments } from '@/lib/api';
+import { advisorsApi, teamsApi, uploadDocuments } from '@/lib/api';
 import { checkDocSize, ensureRequiredDocs, notifyFormErrors } from '@/lib/upload';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useRef, ChangeEvent } from 'react';
@@ -118,6 +118,17 @@ export default function NewAdvisorPage() {
   const [files, setFiles]             = useState<Partial<Record<FileKey, File>>>({});
   const fileRefs = useRef<Partial<Record<FileKey, HTMLInputElement>>>({});
 
+  // ─── Modo Team ───
+  const [mode, setMode] = useState<'individual' | 'team'>('individual');
+  const [teamId, setTeamId] = useState<string | null>(null); // set cuando el team ya se creó
+  const [teamNombre, setTeamNombre] = useState('');
+  const [teamEmail, setTeamEmail] = useState('');       // correo del login compartido del team
+  const [teamClabe, setTeamClabe] = useState('');
+  const [teamBanco, setTeamBanco] = useState('');
+  const [teamTitular, setTeamTitular] = useState('');
+  const [teamMetaAma, setTeamMetaAma] = useState('');
+  const [lastMemberName, setLastMemberName] = useState('');
+
   const { data: advisorsData } = useQuery({
     queryKey: ['advisors'],
     queryFn: () => advisorsApi.getAll().then(r => r.data?.data ?? r.data ?? []),
@@ -125,7 +136,7 @@ export default function NewAdvisorPage() {
   const allAdvisors: any[] = Array.isArray(advisorsData) ? advisorsData : [];
 
   const {
-    register, handleSubmit, control, setValue,
+    register, handleSubmit, control, setValue, reset,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema),
@@ -150,54 +161,103 @@ export default function NewAdvisorPage() {
     if (fileRefs.current[key]) fileRefs.current[key]!.value = '';
   };
 
+  const buildMemberPayload = (data: FormData): Record<string, unknown> => ({
+    name:                data.name,
+    email:               data.email,
+    phone:               data.phone,
+    rfc:                 data.rfc || '',
+    curp:                data.curp || '',
+    fechaNacimiento:     data.fechaNacimiento || undefined,
+    fechaAltaAsesor:     data.fechaAltaAsesor,
+    status:              data.status,
+    inviteByAdvisorId:   data.tieneInvitador === 'si' ? (data.inviteByAdvisorId || '') : '',
+    pasaPorMentoria:     data.pasaPorMentoria === 'si',
+    idMentor:            data.pasaPorMentoria === 'si' ? (data.idMentor || '') : '',
+    nombreBeneficiario:  data.nombreBeneficiario,
+    telefonoBeneficiario: data.telefonoBeneficiario || '',
+    correoBeneficiario:  data.correoBeneficiario || '',
+    observaciones:       data.observaciones || '',
+  });
+
+  // Cada integrante sube sus documentos ligados a SU advisor.id individual.
+  const uploadMemberDocs = async (advisorId?: string) => {
+    if (advisorId && Object.keys(files).length > 0) {
+      setUploading(true);
+      await uploadDocuments(files, {
+        ine:           'ine',
+        curp_doc:      'curp',
+        domicilio:     'comprobante_domicilio',
+        antecedentes:  'antecedentes_penales',
+        contrato:      'contrato_comisionista',
+        csf:           'constancia_fiscal',
+        estado_cuenta: 'estado_cuenta',
+      }, 'asesor', advisorId);
+    }
+  };
+
   const onSubmit = async (data: FormData) => {
     // Documentos obligatorios (marcados con * en DOC_SLOTS)
     const requiredDocs = DOC_SLOTS.filter((s) => s.required).map((s) => ({ key: s.key, label: s.label }));
     if (!ensureRequiredDocs(files as Record<string, File | undefined>, requiredDocs)) return;
 
+    // Validar encabezado del team al crearlo
+    if (mode === 'team' && !teamId) {
+      if (!teamNombre.trim()) { notify.error('El nombre del Team es requerido.'); return; }
+      if (!teamEmail.trim())  { notify.error('El correo de acceso del Team es requerido.'); return; }
+    }
+
     try {
-      const res = await advisorsApi.create({
-        name:                data.name,
-        email:               data.email,
-        phone:               data.phone,
-        rfc:                 data.rfc || '',
-        curp:                data.curp || '',
-        fechaNacimiento:     data.fechaNacimiento || undefined,
-        fechaAltaAsesor:     data.fechaAltaAsesor,
-        status:              data.status,
-        inviteByAdvisorId:   data.tieneInvitador === 'si' ? (data.inviteByAdvisorId || '') : '',
-        pasaPorMentoria:     data.pasaPorMentoria === 'si',
-        idMentor:            data.pasaPorMentoria === 'si' ? (data.idMentor || '') : '',
-        nombreBeneficiario:  data.nombreBeneficiario,
-        telefonoBeneficiario: data.telefonoBeneficiario || '',
-        correoBeneficiario:  data.correoBeneficiario || '',
-        observaciones:       data.observaciones || '',
-      } as Record<string, unknown>);
+      const member = buildMemberPayload(data);
 
-      const advisorId = res.data?.id;
-      if (advisorId && Object.keys(files).length > 0) {
-        setUploading(true);
-        await uploadDocuments(files, {
-          ine:           'ine',
-          curp_doc:      'curp',
-          domicilio:     'comprobante_domicilio',
-          antecedentes:  'antecedentes_penales',
-          contrato:      'contrato_comisionista',
-          csf:           'constancia_fiscal',
-          estado_cuenta: 'estado_cuenta',
-        }, 'asesor', advisorId);
+      if (mode === 'individual') {
+        const res = await advisorsApi.create(member);
+        await uploadMemberDocs(res.data?.id);
+        setCreatedEmail(data.email);
+        setTempPassword(res.data?.tempPassword ?? '');
+        setSuccess(true);
+        notify.success('Asesor registrado correctamente.');
+        setTimeout(() => router.push('/advisors'), 8000);
+
+      } else if (!teamId) {
+        // Crear team nuevo + primer integrante
+        const res = await teamsApi.create({
+          nombre:             teamNombre.trim(),
+          email:              teamEmail.trim(),
+          clabeInterbancaria: teamClabe || undefined,
+          banco:              teamBanco || undefined,
+          titularCuenta:      teamTitular || undefined,
+          metaAma:            teamMetaAma ? Number(teamMetaAma) : undefined,
+          primerIntegrante:   member,
+        });
+        await uploadMemberDocs(res.data?.member?.id);
+        setTeamId(res.data?.teamId ?? null);
+        setCreatedEmail(teamEmail.trim());   // login COMPARTIDO del team
+        setTempPassword(res.data?.tempPassword ?? '');
+        setLastMemberName(data.name);
+        setSuccess(true);
+        notify.success('Team creado con su primer integrante.');
+
+      } else {
+        // Agregar integrante a un team ya creado
+        const res = await teamsApi.addMember(teamId, member);
+        await uploadMemberDocs(res.data?.id);
+        setLastMemberName(data.name);
+        setSuccess(true);
+        notify.success('Integrante agregado al Team.');
       }
-
-      setCreatedEmail(data.email);
-      setTempPassword(res.data?.tempPassword ?? '');
-      setSuccess(true);
-      notify.success('Asesor registrado correctamente.');
-      setTimeout(() => router.push('/advisors'), 8000);
     } catch {
       // El error se muestra como toast flotante global (interceptor de axios).
     } finally {
       setUploading(false);
     }
+  };
+
+  // Limpia el formulario para capturar otro integrante del mismo team.
+  const addAnotherMember = () => {
+    reset({ tieneInvitador: 'no', pasaPorMentoria: 'no', status: 'Activo', curp: '', rfc: '' });
+    setFiles({});
+    Object.values(fileRefs.current).forEach((r) => { if (r) r.value = ''; });
+    setSuccess(false);
   };
 
   if (success) {
@@ -214,25 +274,50 @@ export default function NewAdvisorPage() {
               <CheckCircle size={30} color="#059669" />
             </div>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 8 }}>
-              Asesor Registrado Exitosamente
+              {mode === 'individual'
+                ? 'Asesor Registrado Exitosamente'
+                : (tempPassword ? `Team "${teamNombre}" creado` : `Integrante agregado al Team`)}
             </h2>
-            <div style={{ background: '#fef9ec', border: '1px solid #d1b78a', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>CREDENCIALES DE ACCESO — compartir con el asesor</div>
-              <div style={{ fontSize: 13 }}>
-                <span style={{ color: 'var(--color-on-surface-variant)' }}>Correo: </span>
-                <strong>{createdEmail}</strong>
+            {lastMemberName && (
+              <p style={{ fontSize: 13, color: 'var(--color-on-surface-variant)', marginBottom: 8 }}>
+                Integrante: <strong>{lastMemberName}</strong>{teamId ? ` · Team ${teamId}` : ''}
+              </p>
+            )}
+
+            {/* Credenciales: solo cuando se creó un login (individual, o team recién creado) */}
+            {tempPassword && (
+              <div style={{ background: '#fef9ec', border: '1px solid #d1b78a', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
+                  {mode === 'individual' ? 'CREDENCIALES DE ACCESO — compartir con el asesor' : 'CREDENCIALES DEL TEAM — login compartido de los integrantes'}
+                </div>
+                <div style={{ fontSize: 13 }}>
+                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Correo: </span>
+                  <strong>{createdEmail}</strong>
+                </div>
+                <div style={{ fontSize: 13, marginTop: 4 }}>
+                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Contraseña temporal: </span>
+                  <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{tempPassword || '(enviada por correo)'}</strong>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 8 }}>
+                  Se deberá cambiar la contraseña al primer inicio de sesión.
+                </div>
               </div>
-              <div style={{ fontSize: 13, marginTop: 4 }}>
-                <span style={{ color: 'var(--color-on-surface-variant)' }}>Contraseña temporal: </span>
-                <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{tempPassword || '(enviada por correo)'}</strong>
+            )}
+
+            {mode === 'team' ? (
+              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
+                <button className="btn btn-primary" onClick={addAnotherMember}>
+                  + Agregar otro integrante
+                </button>
+                <button className="btn btn-secondary" onClick={() => router.push('/advisors')}>
+                  Terminar
+                </button>
               </div>
-              <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 8 }}>
-                El asesor deberá cambiar su contraseña al primer inicio de sesión.
-              </div>
-            </div>
-            <p style={{ fontSize: 13, color: 'var(--color-on-surface-variant)' }}>
-              Redirigiendo al listado de asesores...
-            </p>
+            ) : (
+              <p style={{ fontSize: 13, color: 'var(--color-on-surface-variant)' }}>
+                Redirigiendo al listado de asesores...
+              </p>
+            )}
           </div>
         </div>
       </>
@@ -265,6 +350,70 @@ export default function NewAdvisorPage() {
         </div>
 
         <form onSubmit={handleSubmit(onSubmit, notifyFormErrors)} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* ─── Modo de alta: Individual / Team ─── */}
+          <div className="card">
+            <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10, color: 'var(--color-primary)' }}>Modo de alta</div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              {(['individual', 'team'] as const).map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => { if (!teamId) setMode(m); }}
+                  style={{
+                    flex: 1, padding: '12px', borderRadius: 8, cursor: teamId ? 'not-allowed' : 'pointer',
+                    border: `1.5px solid ${mode === m ? 'var(--color-primary)' : 'var(--color-outline-variant)'}`,
+                    background: mode === m ? 'var(--color-primary)' : 'var(--color-surface-container-lowest)',
+                    color: mode === m ? '#fff' : 'var(--color-on-surface)', fontWeight: 600, fontSize: 13,
+                  }}
+                >
+                  {m === 'individual' ? 'Asesor individual' : 'Team (varios integrantes)'}
+                </button>
+              ))}
+            </div>
+            {mode === 'team' && teamId && (
+              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginTop: 10 }}>
+                Agregando integrantes al team <strong>{teamNombre || teamId}</strong>. Cada integrante llena su propio formulario y documentos.
+              </div>
+            )}
+          </div>
+
+          {/* ─── Datos del Team (solo al crear el team) ─── */}
+          {mode === 'team' && !teamId && (
+            <div className="card">
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4, color: 'var(--color-primary)' }}>Datos del Team</div>
+              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>Login y cuenta bancaria compartidos del equipo</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className="input-group">
+                  <label className="input-label">Nombre del Team *</label>
+                  <input className="input" value={teamNombre} onChange={(e) => setTeamNombre(e.target.value)} placeholder="Ej: Equipo Norte" />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Correo de acceso del Team *</label>
+                  <input className="input" type="email" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="equipo.norte@ideauno.com" />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">CLABE interbancaria</label>
+                  <input className="input" value={teamClabe} onChange={(e) => setTeamClabe(e.target.value)} inputMode="numeric" maxLength={18} placeholder="18 dígitos" />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Banco</label>
+                  <input className="input" value={teamBanco} onChange={(e) => setTeamBanco(e.target.value)} placeholder="Ej: BBVA" />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Titular de la cuenta</label>
+                  <input className="input" value={teamTitular} onChange={(e) => setTeamTitular(e.target.value)} placeholder="Nombre del titular" />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">Meta AMA del team ($)</label>
+                  <input className="input" value={teamMetaAma} onChange={(e) => setTeamMetaAma(e.target.value)} inputMode="numeric" placeholder="0" />
+                </div>
+              </div>
+              <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 10 }}>
+                Abajo capturas al <strong>primer integrante</strong> con sus documentos. Después podrás agregar más.
+              </div>
+            </div>
+          )}
 
           {/* ─── S1: Datos Generales ─── */}
           <div className="card">
@@ -496,7 +645,9 @@ export default function NewAdvisorPage() {
               Cancelar
             </button>
             <button type="submit" className="btn btn-primary" disabled={isSubmitting || uploading}>
-              {isSubmitting ? 'Registrando asesor...' : uploading ? 'Subiendo documentos...' : 'Registrar Asesor'}
+              {isSubmitting ? 'Guardando...' : uploading ? 'Subiendo documentos...'
+                : mode === 'individual' ? 'Registrar Asesor'
+                : teamId ? 'Agregar integrante' : 'Crear Team y primer integrante'}
             </button>
           </div>
 

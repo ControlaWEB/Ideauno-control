@@ -177,6 +177,15 @@ export const advisorsApi = {
     api.patch(`/advisors/${id}/bank`, { clabe_interbancaria, banco, titular_cuenta }),
 };
 
+// TEAMS (alta de asesores en modo team)
+export const teamsApi = {
+  create: (data: Record<string, unknown>) => api.post('/teams', data),
+  addMember: (teamId: string, data: Record<string, unknown>) =>
+    api.post(`/teams/${teamId}/members`, data),
+  getOne: (id: string) => api.get(`/teams/${id}`),
+  getDocumentosPendientes: (id: string) => api.get(`/teams/${id}/documentos-pendientes`),
+};
+
 // OPERATIONS (cierres)
 export const operationsApi = {
   getAll: (params?: Record<string, unknown>) => api.get('/operations', { params }),

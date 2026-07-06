@@ -155,37 +155,45 @@ export class AdvisorsService {
     telefonoBeneficiario?: string;
     correoBeneficiario?: string;
     observaciones?: string;
-  }) {
-    // Evitar 500 por violación de unicidad: verificar duplicado y responder 409
-    const dup = await this.databaseService.query<any>(
-      `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
-      { email: dto.email.trim().toLowerCase() },
-    );
-    if (dup.length > 0) {
-      throw new ConflictException(
-        'Ya existe un usuario registrado con ese correo electrónico.',
+  }, opts: { teamId?: string } = {}) {
+    // Un integrante de Team NO crea login propio: comparte el login del team.
+    // user_id queda NULL y se liga al team vía team_id.
+    const isTeamMember = !!opts.teamId;
+
+    let userId: string | null = null;
+    let tempPassword = '';
+
+    if (!isTeamMember) {
+      // Evitar 500 por violación de unicidad: verificar duplicado y responder 409
+      const dup = await this.databaseService.query<any>(
+        `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
+        { email: dto.email.trim().toLowerCase() },
+      );
+      if (dup.length > 0) {
+        throw new ConflictException(
+          'Ya existe un usuario registrado con ese correo electrónico.',
+        );
+      }
+      // Password temporal aleatoria (se envía por correo, no queda hardcodeada)
+      tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
+      userId = randomUUID();
+      const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
+      await this.databaseService.query(
+        `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
+         VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
+        { userId, name: dto.name, email: dto.email, hash: tempPasswordHash },
       );
     }
 
     const id = 'ADV-' + Math.floor(1000 + Math.random() * 9000);
 
-    // Password temporal aleatoria (se envía por correo, no queda hardcodeada)
-    const tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
-    const userId = randomUUID();
-    const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
-    await this.databaseService.query(
-      `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
-       VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
-      { userId, name: dto.name, email: dto.email, hash: tempPasswordHash },
-    );
-
     const sql = `INSERT INTO public.advisors (
-      id, user_id, name, email, phone, rfc, curp, fecha_nacimiento, fecha_alta_asesor,
+      id, user_id, team_id, name, email, phone, rfc, curp, fecha_nacimiento, fecha_alta_asesor,
       specialty, license, status, invite_by_advisor_id, meta_ama,
       pasa_por_mentoria, id_mentor, nombre_beneficiario, telefono_beneficiario,
       correo_beneficiario, observaciones
     ) VALUES (
-      @id, @userId, @name, @email, @phone, @rfc, @curp, @fechaNacimiento, @fechaAltaAsesor,
+      @id, @userId, @teamId, @name, @email, @phone, @rfc, @curp, @fechaNacimiento, @fechaAltaAsesor,
       @specialty, @license, @status, @inviteByAdvisorId, @metaAma,
       @pasaPorMentoria, @idMentor, @nombreBeneficiario, @telefonoBeneficiario,
       @correoBeneficiario, @observaciones
@@ -194,6 +202,7 @@ export class AdvisorsService {
     await this.databaseService.query(sql, {
       id,
       userId,
+      teamId: opts.teamId ?? null,
       name: dto.name,
       email: dto.email,
       phone: dto.phone || '',
@@ -215,10 +224,10 @@ export class AdvisorsService {
     });
 
     await this.auditService.log({
-      action: 'CREATE_ADVISOR',
+      action: isTeamMember ? 'CREATE_TEAM_MEMBER' : 'CREATE_ADVISOR',
       userId: 'system',
       userEmail: 'system',
-      details: { advisorId: id, name: dto.name },
+      details: { advisorId: id, name: dto.name, teamId: opts.teamId ?? null },
     });
 
     // Initialize AMA period starting on advisor's high date
@@ -247,17 +256,75 @@ export class AdvisorsService {
       },
     );
 
-    await this.emailService.send(
-      [dto.email],
-      'Alta de nuevo asesor',
-      `<p>Se creó una cuenta de asesor en el sistema.</p>
-       <p><strong>Asesor:</strong> ${dto.name}<br/>
-       <strong>Correo:</strong> ${dto.email}<br/>
-       <strong>Contraseña temporal:</strong> ${tempPassword}</p>
-       <p>El asesor deberá cambiar la contraseña al iniciar sesión por primera vez.</p>`,
-    );
+    // Solo el asesor individual recibe login/correo. El integrante de team
+    // comparte el login del team (se envía al crear el team, no por integrante).
+    if (!isTeamMember) {
+      await this.emailService.send(
+        [dto.email],
+        'Alta de nuevo asesor',
+        `<p>Se creó una cuenta de asesor en el sistema.</p>
+         <p><strong>Asesor:</strong> ${dto.name}<br/>
+         <strong>Correo:</strong> ${dto.email}<br/>
+         <strong>Contraseña temporal:</strong> ${tempPassword}</p>
+         <p>El asesor deberá cambiar la contraseña al iniciar sesión por primera vez.</p>`,
+      );
+    }
 
-    return { id, userId, tempPassword, ...dto };
+    return { id, userId, tempPassword, teamId: opts.teamId ?? null, ...dto };
+  }
+
+  /**
+   * Crea el login compartido de un Team (una sola fila en usuarios).
+   * Lo usa TeamsService al dar de alta un team nuevo.
+   */
+  async createSharedLogin(name: string, email: string) {
+    const dup = await this.databaseService.query<any>(
+      `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
+      { email: email.trim().toLowerCase() },
+    );
+    if (dup.length > 0) {
+      throw new ConflictException(
+        'Ya existe un usuario registrado con ese correo electrónico.',
+      );
+    }
+    const tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
+    const userId = randomUUID();
+    const hash = await bcrypt.hash(tempPassword, 10);
+    await this.databaseService.query(
+      `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
+       VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
+      { userId, name, email, hash },
+    );
+    return { userId, tempPassword };
+  }
+
+  /**
+   * Resuelve la cuenta bancaria destino del pago de un asesor:
+   * si pertenece a un team, paga a la cuenta del team; si no, a la suya.
+   */
+  async getPayoutAccount(advisorId: string) {
+    const rows = await this.databaseService.query<any>(
+      `SELECT
+         a.team_id,
+         CASE WHEN a.team_id IS NOT NULL THEN t.clabe_interbancaria ELSE a.clabe_interbancaria END AS clabe,
+         CASE WHEN a.team_id IS NOT NULL THEN t.banco ELSE a.banco END AS banco,
+         CASE WHEN a.team_id IS NOT NULL THEN t.titular_cuenta ELSE a.titular_cuenta END AS titular,
+         CASE WHEN a.team_id IS NOT NULL THEN t.nombre ELSE a.name END AS destino_nombre
+       FROM public.advisors a
+       LEFT JOIN public.teams t ON t.id = a.team_id
+       WHERE a.id = @advisorId LIMIT 1`,
+      { advisorId },
+    );
+    const r = rows[0];
+    if (!r) return null;
+    return {
+      target: r.team_id ? 'team' : 'advisor',
+      teamId: r.team_id ?? null,
+      clabe: r.clabe ?? '',
+      banco: r.banco ?? '',
+      titular: r.titular ?? '',
+      destinoNombre: r.destino_nombre ?? '',
+    };
   }
 
   async updateStatus(
