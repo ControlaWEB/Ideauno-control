@@ -220,6 +220,22 @@ const GUIDES: Guide[] = [
       { text: 'ventas_para_salir_mentoria: número de cierres que un asesor necesita para salir del periodo de mentoría.' },
     ],
   },
+  {
+    id: 'alta-team',
+    title: 'Dar de alta un Team (varios asesores)',
+    icon: Users,
+    summary: 'Agrupa asesores en un equipo: cada uno con su propio usuario, dashboard combinado y pago a la cuenta del team.',
+    roles: ['Super Admin', 'Admin'],
+    accent: '#78350f',
+    keywords: 'team equipo alta varios asesores integrantes usuario propio login individual cuenta bancaria clabe documentos pago grupal dashboard combinado',
+    steps: [
+      { text: 'Entra a “Nuevo Asesor” (sección Equipo) y arriba elige el modo “Team (varios integrantes)”.', href: '/advisors/new', linkLabel: 'Ir a Nuevo Asesor' },
+      { text: 'Llena “Datos del Team”: nombre del equipo y la cuenta bancaria del team (CLABE, banco, titular). Las comisiones de TODO el equipo se pagan a ESTA cuenta.' },
+      { text: 'Captura al PRIMER integrante igual que un asesor normal: sus datos, su propio correo (que será su login) y sus documentos. Cada integrante tiene su PROPIO usuario y entra por separado. Los documentos de cada quien se guardan ligados a ESE integrante.' },
+      { text: 'Guarda con “Crear Team y primer integrante”. El sistema muestra las credenciales de acceso de ESE integrante (su propio login).' },
+      { text: 'Presiona “Agregar otro integrante” para sumar más miembros: se repite el mismo formulario (cada uno con su correo/login y documentos). Al terminar, presiona “Terminar”.', href: '/advisors', linkLabel: 'Ver Asesores' },
+    ],
+  },
 ];
 
 interface Faq { q: string; a: string; href?: string; linkLabel?: string; keywords: string; }
@@ -278,8 +294,13 @@ const FAQS: Faq[] = [
   },
   {
     q: '¿Un asesor puede ver los datos de otro asesor?',
-    a: 'No. Cada asesor solo ve su propia información. Únicamente los administradores pueden ver el “Mi Dashboard” de cualquier asesor usando el selector en el Dashboard.',
+    a: 'No. Cada asesor solo ve su propia información. Únicamente los administradores pueden ver el “Mi Dashboard” de cualquier asesor usando el selector en el Dashboard. (Excepción: los integrantes de un mismo Team comparten la vista del equipo.)',
     keywords: 'asesor ver otro privacidad datos permiso mi dashboard',
+  },
+  {
+    q: '¿Qué ve un integrante de un Team?',
+    a: 'Cada integrante entra con su propio usuario, pero su “Mi Dashboard” muestra los datos COMBINADOS de todo el equipo, y sus listas de Cierres, Comisiones y Pagos muestran los registros de TODO el team (operan como una unidad). La meta AMA se mide a nivel equipo y las comisiones del equipo se pagan a la cuenta bancaria del Team.',
+    keywords: 'team equipo integrante ve datos combinados dashboard cierres comisiones pagos ama cuenta',
   },
 ];
 

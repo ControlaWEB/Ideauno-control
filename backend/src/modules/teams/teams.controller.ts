@@ -86,7 +86,6 @@ class TeamMemberDto {
 
 class CreateTeamDto {
   @Transform(trim) @IsNotEmpty() @IsString() @MaxLength(MAX_NOMBRE) nombre: string;
-  @Transform(trimLower) @IsEmail() @IsNotEmpty() @MaxLength(MAX_EMAIL) email: string;
 
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) clabeInterbancaria?: string;
   @IsOptional() @IsString() @MaxLength(MAX_NOMBRE) banco?: string;

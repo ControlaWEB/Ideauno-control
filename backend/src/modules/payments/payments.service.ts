@@ -109,6 +109,7 @@ export class PaymentsService {
 
   async findAll(filters: {
     advisorId?: string;
+    teamId?: string;
     status?: string;
     page?: number;
     limit?: number;
@@ -119,7 +120,11 @@ export class PaymentsService {
     const clauses: string[] = [];
     const params: Record<string, any> = { limit, offset };
 
-    if (filters.advisorId) {
+    // Scope de team: el integrante ve los pagos de TODO el equipo.
+    if (filters.teamId) {
+      clauses.push('p.id_asesor IN (SELECT id FROM public.advisors WHERE team_id = @teamId)');
+      params.teamId = filters.teamId;
+    } else if (filters.advisorId) {
       clauses.push('p.id_asesor = @advisorId');
       params.advisorId = filters.advisorId;
     }

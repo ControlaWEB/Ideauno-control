@@ -302,6 +302,7 @@ export class OperationsService {
     status?: string;
     type?: string;
     advisorId?: string;
+    teamId?: string;
   }) {
     const page = filters.page || 1;
     const limit = filters.limit || 10;
@@ -317,7 +318,11 @@ export class OperationsService {
       clauses.push('o.type = @type');
       params.type = filters.type;
     }
-    if (filters.advisorId) {
+    // Scope de team tiene prioridad: el integrante ve las operaciones de TODO el equipo.
+    if (filters.teamId) {
+      clauses.push('o.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = @teamId)');
+      params.teamId = filters.teamId;
+    } else if (filters.advisorId) {
       clauses.push('o.advisor_id = @advisorId');
       params.advisorId = filters.advisorId;
     }
@@ -477,6 +482,7 @@ export class OperationsService {
 
   async findAllCommissions(filters: {
     advisorId?: string;
+    teamId?: string;
     status?: string;
     type?: string;
     page?: number;
@@ -488,7 +494,11 @@ export class OperationsService {
     const clauses: string[] = [];
     const params: Record<string, any> = { limit, offset };
 
-    if (filters.advisorId) {
+    // Scope de team: el integrante ve las comisiones de TODO el equipo.
+    if (filters.teamId) {
+      clauses.push('c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = @teamId)');
+      params.teamId = filters.teamId;
+    } else if (filters.advisorId) {
       clauses.push('c.advisor_id = @advId');
       params.advId = filters.advisorId;
     }

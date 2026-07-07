@@ -103,12 +103,15 @@ export class PaymentsController {
 
   @Get()
   findAll(@Request() req: any, @Query() query: FindPaymentsQueryDto) {
-    const effectiveAdvisorId =
-      req.user.role === UserRole.ASESOR
-        ? (req.user.advisorId ?? req.user.id)
-        : query.advisorId;
+    const isAsesor = req.user.role === UserRole.ASESOR;
+    // Integrante de team ve los pagos de todo el equipo; asesor solo, los suyos.
+    const teamId = isAsesor ? (req.user.teamId ?? undefined) : undefined;
+    const effectiveAdvisorId = isAsesor
+      ? (teamId ? undefined : (req.user.advisorId ?? req.user.id))
+      : query.advisorId;
     return this.paymentsService.findAll({
       advisorId: effectiveAdvisorId,
+      teamId,
       status: query.status,
       page: query.page ?? 1,
       limit: query.limit ?? 10,

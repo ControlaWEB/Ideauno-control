@@ -122,7 +122,6 @@ export default function NewAdvisorPage() {
   const [mode, setMode] = useState<'individual' | 'team'>('individual');
   const [teamId, setTeamId] = useState<string | null>(null); // set cuando el team ya se creó
   const [teamNombre, setTeamNombre] = useState('');
-  const [teamEmail, setTeamEmail] = useState('');       // correo del login compartido del team
   const [teamClabe, setTeamClabe] = useState('');
   const [teamBanco, setTeamBanco] = useState('');
   const [teamTitular, setTeamTitular] = useState('');
@@ -203,7 +202,6 @@ export default function NewAdvisorPage() {
     // Validar encabezado del team al crearlo
     if (mode === 'team' && !teamId) {
       if (!teamNombre.trim()) { notify.error('El nombre del Team es requerido.'); return; }
-      if (!teamEmail.trim())  { notify.error('El correo de acceso del Team es requerido.'); return; }
     }
 
     try {
@@ -219,10 +217,9 @@ export default function NewAdvisorPage() {
         setTimeout(() => router.push('/advisors'), 8000);
 
       } else if (!teamId) {
-        // Crear team nuevo + primer integrante
+        // Crear team nuevo + primer integrante (con su propio login)
         const res = await teamsApi.create({
           nombre:             teamNombre.trim(),
-          email:              teamEmail.trim(),
           clabeInterbancaria: teamClabe || undefined,
           banco:              teamBanco || undefined,
           titularCuenta:      teamTitular || undefined,
@@ -231,16 +228,18 @@ export default function NewAdvisorPage() {
         });
         await uploadMemberDocs(res.data?.member?.id);
         setTeamId(res.data?.teamId ?? null);
-        setCreatedEmail(teamEmail.trim());   // login COMPARTIDO del team
-        setTempPassword(res.data?.tempPassword ?? '');
+        setCreatedEmail(data.email);                              // login propio del integrante
+        setTempPassword(res.data?.member?.tempPassword ?? '');
         setLastMemberName(data.name);
         setSuccess(true);
         notify.success('Team creado con su primer integrante.');
 
       } else {
-        // Agregar integrante a un team ya creado
+        // Agregar integrante a un team ya creado (con su propio login)
         const res = await teamsApi.addMember(teamId, member);
         await uploadMemberDocs(res.data?.id);
+        setCreatedEmail(data.email);
+        setTempPassword(res.data?.tempPassword ?? '');
         setLastMemberName(data.name);
         setSuccess(true);
         notify.success('Integrante agregado al Team.');
@@ -288,7 +287,7 @@ export default function NewAdvisorPage() {
             {tempPassword && (
               <div style={{ background: '#fef9ec', border: '1px solid #d1b78a', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
-                  {mode === 'individual' ? 'CREDENCIALES DE ACCESO — compartir con el asesor' : 'CREDENCIALES DEL TEAM — login compartido de los integrantes'}
+                  {mode === 'individual' ? 'CREDENCIALES DE ACCESO — compartir con el asesor' : 'CREDENCIALES DEL INTEGRANTE — su propio acceso'}
                 </div>
                 <div style={{ fontSize: 13 }}>
                   <span style={{ color: 'var(--color-on-surface-variant)' }}>Correo: </span>
@@ -382,15 +381,11 @@ export default function NewAdvisorPage() {
           {mode === 'team' && !teamId && (
             <div className="card">
               <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4, color: 'var(--color-primary)' }}>Datos del Team</div>
-              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>Login y cuenta bancaria compartidos del equipo</div>
+              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>Nombre y cuenta bancaria compartida del equipo. Cada integrante tiene su propio usuario.</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="input-group">
                   <label className="input-label">Nombre del Team *</label>
                   <input className="input" value={teamNombre} onChange={(e) => setTeamNombre(e.target.value)} placeholder="Ej: Equipo Norte" />
-                </div>
-                <div className="input-group">
-                  <label className="input-label">Correo de acceso del Team *</label>
-                  <input className="input" type="email" value={teamEmail} onChange={(e) => setTeamEmail(e.target.value)} placeholder="equipo.norte@ideauno.com" />
                 </div>
                 <div className="input-group">
                   <label className="input-label">CLABE interbancaria</label>

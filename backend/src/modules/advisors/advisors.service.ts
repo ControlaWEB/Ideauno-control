@@ -156,34 +156,29 @@ export class AdvisorsService {
     correoBeneficiario?: string;
     observaciones?: string;
   }, opts: { teamId?: string } = {}) {
-    // Un integrante de Team NO crea login propio: comparte el login del team.
-    // user_id queda NULL y se liga al team vía team_id.
+    // Cada integrante de un Team tiene su PROPIO login (entra por separado).
+    // team_id solo lo agrupa para dashboard/pagos; no comparte usuario.
     const isTeamMember = !!opts.teamId;
 
-    let userId: string | null = null;
-    let tempPassword = '';
-
-    if (!isTeamMember) {
-      // Evitar 500 por violación de unicidad: verificar duplicado y responder 409
-      const dup = await this.databaseService.query<any>(
-        `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
-        { email: dto.email.trim().toLowerCase() },
-      );
-      if (dup.length > 0) {
-        throw new ConflictException(
-          'Ya existe un usuario registrado con ese correo electrónico.',
-        );
-      }
-      // Password temporal aleatoria (se envía por correo, no queda hardcodeada)
-      tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
-      userId = randomUUID();
-      const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
-      await this.databaseService.query(
-        `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
-         VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
-        { userId, name: dto.name, email: dto.email, hash: tempPasswordHash },
+    // Evitar 500 por violación de unicidad: verificar duplicado y responder 409
+    const dup = await this.databaseService.query<any>(
+      `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
+      { email: dto.email.trim().toLowerCase() },
+    );
+    if (dup.length > 0) {
+      throw new ConflictException(
+        'Ya existe un usuario registrado con ese correo electrónico.',
       );
     }
+    // Password temporal aleatoria (se envía por correo, no queda hardcodeada)
+    const tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
+    const userId = randomUUID();
+    const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
+    await this.databaseService.query(
+      `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
+       VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
+      { userId, name: dto.name, email: dto.email, hash: tempPasswordHash },
+    );
 
     const id = 'ADV-' + Math.floor(1000 + Math.random() * 9000);
 
@@ -256,46 +251,18 @@ export class AdvisorsService {
       },
     );
 
-    // Solo el asesor individual recibe login/correo. El integrante de team
-    // comparte el login del team (se envía al crear el team, no por integrante).
-    if (!isTeamMember) {
-      await this.emailService.send(
-        [dto.email],
-        'Alta de nuevo asesor',
-        `<p>Se creó una cuenta de asesor en el sistema.</p>
-         <p><strong>Asesor:</strong> ${dto.name}<br/>
-         <strong>Correo:</strong> ${dto.email}<br/>
-         <strong>Contraseña temporal:</strong> ${tempPassword}</p>
-         <p>El asesor deberá cambiar la contraseña al iniciar sesión por primera vez.</p>`,
-      );
-    }
+    // Cada asesor (individual o integrante de team) recibe su propio login.
+    await this.emailService.send(
+      [dto.email],
+      isTeamMember ? 'Alta de integrante de equipo' : 'Alta de nuevo asesor',
+      `<p>Se creó una cuenta de asesor en el sistema.</p>
+       <p><strong>Asesor:</strong> ${dto.name}<br/>
+       <strong>Correo:</strong> ${dto.email}<br/>
+       <strong>Contraseña temporal:</strong> ${tempPassword}</p>
+       <p>El asesor deberá cambiar la contraseña al iniciar sesión por primera vez.</p>`,
+    );
 
     return { id, userId, tempPassword, teamId: opts.teamId ?? null, ...dto };
-  }
-
-  /**
-   * Crea el login compartido de un Team (una sola fila en usuarios).
-   * Lo usa TeamsService al dar de alta un team nuevo.
-   */
-  async createSharedLogin(name: string, email: string) {
-    const dup = await this.databaseService.query<any>(
-      `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
-      { email: email.trim().toLowerCase() },
-    );
-    if (dup.length > 0) {
-      throw new ConflictException(
-        'Ya existe un usuario registrado con ese correo electrónico.',
-      );
-    }
-    const tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
-    const userId = randomUUID();
-    const hash = await bcrypt.hash(tempPassword, 10);
-    await this.databaseService.query(
-      `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
-       VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
-      { userId, name, email, hash },
-    );
-    return { userId, tempPassword };
   }
 
   /**

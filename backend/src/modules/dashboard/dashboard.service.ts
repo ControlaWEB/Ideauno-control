@@ -522,8 +522,34 @@ export class DashboardService {
         amaData: null,
         asesoresInvitados: 0,
         ultimasCuatroOps: [],
+        advisor: null,
+        team: null,
       };
     }
+
+    // Perfil + team del asesor. Si pertenece a un team, TODO se agrega por equipo.
+    const advisorRows = await this.databaseService.query<any>(
+      `SELECT id, name, email, phone, status, url_foto, specialty, team_id
+       FROM public.advisors WHERE id = @advisorId LIMIT 1`,
+      { advisorId },
+    );
+    const advisor = advisorRows[0] ?? null;
+    const teamId: string | null = advisor?.team_id ?? null;
+    let team: any = null;
+    if (teamId) {
+      const tRows = await this.databaseService.query<any>(
+        `SELECT id, nombre, meta_ama FROM public.teams WHERE id = @teamId LIMIT 1`,
+        { teamId },
+      );
+      team = tRows[0] ?? null;
+    }
+
+    // scopeId + predicado: por team (IN todos los integrantes) o por asesor individual.
+    const scopeId = teamId ?? advisorId;
+    const scope = (col: string) =>
+      teamId
+        ? `${col} IN (SELECT id FROM public.advisors WHERE team_id = @scopeId)`
+        : `${col} = @scopeId`;
 
     const now = new Date();
     const yearStart = `${now.getFullYear()}-01-01`;
@@ -539,42 +565,86 @@ export class DashboardService {
       gratificacionesRows,
       propActivasRows,
       propTotalRows,
-      amaDataRows,
       asesoresInvitadosRows,
       ultimasOpsRows,
       pagosMentoriaRows,
-      advisorRows,
     ] = await Promise.all([
       this.databaseService.query<any>(
-        `SELECT COUNT(*) as c FROM public.operations WHERE advisor_id = @advisorId AND fecha_cierre >= @monthStart AND fecha_cierre < @monthEnd`,
-        { advisorId, monthStart, monthEnd },
+        `SELECT COUNT(*) as c FROM public.operations WHERE ${scope('advisor_id')} AND fecha_cierre >= @monthStart AND fecha_cierre < @monthEnd`,
+        { scopeId, monthStart, monthEnd },
       ),
       this.databaseService.query<any>(
-        `SELECT COUNT(*) as c FROM public.operations WHERE advisor_id = @advisorId AND fecha_cierre >= @yearStart`,
-        { advisorId, yearStart },
+        `SELECT COUNT(*) as c FROM public.operations WHERE ${scope('advisor_id')} AND fecha_cierre >= @yearStart`,
+        { scopeId, yearStart },
       ),
       this.databaseService.query<any>(
-        `SELECT COALESCE(SUM(monto_neto_asesor), 0) as t FROM public.commissions WHERE advisor_id = @advisorId`,
-        { advisorId },
+        `SELECT COALESCE(SUM(monto_neto_asesor), 0) as t FROM public.commissions WHERE ${scope('advisor_id')}`,
+        { scopeId },
       ),
       this.databaseService.query<any>(
-        `SELECT COALESCE(SUM(monto_neto_asesor), 0) as t FROM public.commissions WHERE advisor_id = @advisorId AND created_at >= @monthStart AND created_at < @monthEnd`,
-        { advisorId, monthStart, monthEnd },
+        `SELECT COALESCE(SUM(monto_neto_asesor), 0) as t FROM public.commissions WHERE ${scope('advisor_id')} AND created_at >= @monthStart AND created_at < @monthEnd`,
+        { scopeId, monthStart, monthEnd },
       ),
       this.databaseService.query<any>(
-        `SELECT COALESCE(SUM(monto_invitacion), 0) as t FROM public.commissions WHERE id_asesor_invitador = @advisorId`,
-        { advisorId },
+        `SELECT COALESCE(SUM(monto_invitacion), 0) as t FROM public.commissions WHERE ${scope('id_asesor_invitador')}`,
+        { scopeId },
       ),
       this.databaseService.query<any>(
-        `SELECT COUNT(*) as c FROM public.properties WHERE advisor_id = @advisorId AND status = 'Activa'`,
-        { advisorId },
+        `SELECT COUNT(*) as c FROM public.properties WHERE ${scope('advisor_id')} AND status = 'Activa'`,
+        { scopeId },
       ),
       this.databaseService.query<any>(
-        `SELECT COUNT(*) as c FROM public.properties WHERE advisor_id = @advisorId`,
-        { advisorId },
+        `SELECT COUNT(*) as c FROM public.properties WHERE ${scope('advisor_id')}`,
+        { scopeId },
       ),
       this.databaseService.query<any>(
-        // AMA del asesor calculada EN VIVO (periodo vigente + acumulado real)
+        `SELECT COUNT(*) as c FROM public.advisors WHERE ${scope('invite_by_advisor_id')}`,
+        { scopeId },
+      ),
+      this.databaseService.query<any>(
+        `SELECT o.id, o.code, o.type, o.status, o.fecha_cierre,
+                p.address as property_address,
+                c.monto_neto_asesor
+         FROM public.operations o
+         LEFT JOIN public.properties p ON o.property_id = p.id
+         LEFT JOIN public.commissions c ON c.advisor_id = o.advisor_id AND c.operation_id = o.id AND c.type = 'cierre'
+         WHERE ${scope('o.advisor_id')}
+         ORDER BY o.created_at DESC LIMIT 4`,
+        { scopeId },
+      ),
+      // Pagos por mentoría: comisiones de mentoría donde el mentor está en el scope
+      this.databaseService.query<any>(
+        `SELECT COALESCE(SUM(c.monto_mentoria), 0) as t
+         FROM public.commissions c
+         JOIN public.advisors a ON a.id = c.advisor_id
+         WHERE ${scope('a.id_mentor')}`,
+        { scopeId },
+      ),
+    ]);
+
+    // ── AMA: por team (meta del team + acumulado agregado) o por asesor (periodo vigente) ──
+    let amaData: any = null;
+    if (teamId) {
+      const accRows = await this.databaseService.query<any>(
+        `SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+         FROM public.commissions c
+         JOIN public.operations o ON o.id = c.operation_id
+         WHERE ${scope('c.advisor_id')} AND c.type = 'cierre' AND o.status <> 'Cancelado'`,
+        { scopeId },
+      );
+      const acumulado = Number(accRows[0]?.acumulado || 0);
+      const meta = Number(team?.meta_ama || 0);
+      amaData = {
+        meta_ama: meta,
+        monto_acumulado: acumulado,
+        avance_pct: meta > 0 ? Math.round((acumulado / meta) * 10000) / 100 : 0,
+        ama_alcanzada: meta > 0 && acumulado >= meta,
+        estatus_ama: 'En progreso',
+        fecha_inicio_periodo: null,
+        fecha_fin_periodo: null,
+      };
+    } else {
+      const amaRows = await this.databaseService.query<any>(
         `SELECT fa.id, fa.meta_ama, fa.estatus_ama, fa.fecha_inicio_periodo, fa.fecha_fin_periodo,
                 COALESCE(acc.acumulado, 0) AS monto_acumulado,
                 CASE WHEN fa.meta_ama > 0
@@ -593,37 +663,9 @@ export class DashboardService {
          WHERE fa.id_asesor = @advisorId AND fa.estatus_ama <> 'Reiniciado'
          ORDER BY fa.created_at DESC LIMIT 1`,
         { advisorId },
-      ),
-      this.databaseService.query<any>(
-        `SELECT COUNT(*) as c FROM public.advisors WHERE invite_by_advisor_id = @advisorId`,
-        { advisorId },
-      ),
-      this.databaseService.query<any>(
-        `SELECT o.id, o.code, o.type, o.status, o.fecha_cierre,
-                p.address as property_address,
-                c.monto_neto_asesor
-         FROM public.operations o
-         LEFT JOIN public.properties p ON o.property_id = p.id
-         LEFT JOIN public.commissions c ON c.advisor_id = o.advisor_id AND c.operation_id = o.id AND c.type = 'cierre'
-         WHERE o.advisor_id = @advisorId
-         ORDER BY o.created_at DESC LIMIT 4`,
-        { advisorId },
-      ),
-      // Pagos por mentoría: dinero recibido de comisiones de asesores bajo mi mentoría
-      this.databaseService.query<any>(
-        `SELECT COALESCE(SUM(c.monto_mentoria), 0) as t
-         FROM public.commissions c
-         JOIN public.advisors a ON a.id = c.advisor_id
-         WHERE a.id_mentor = @advisorId`,
-        { advisorId },
-      ),
-      // Perfil del asesor (para el encabezado de Mi Dashboard)
-      this.databaseService.query<any>(
-        `SELECT id, name, email, phone, status, url_foto, specialty
-         FROM public.advisors WHERE id = @advisorId LIMIT 1`,
-        { advisorId },
-      ),
-    ]);
+      );
+      amaData = amaRows[0] ?? null;
+    }
 
     return {
       cierresMes: Number(cierresMesRows[0]?.c || 0),
@@ -633,11 +675,12 @@ export class DashboardService {
       gratificacionesRecibidas: Number(gratificacionesRows[0]?.t || 0),
       propiedadesActivas: Number(propActivasRows[0]?.c || 0),
       propiedadesTotal: Number(propTotalRows[0]?.c || 0),
-      amaData: amaDataRows[0] ?? null,
+      amaData,
       asesoresInvitados: Number(asesoresInvitadosRows[0]?.c || 0),
       ultimasCuatroOps: ultimasOpsRows,
       pagosMentoria: Number(pagosMentoriaRows[0]?.t || 0),
-      advisor: advisorRows[0] ?? null,
+      advisor,
+      team: team ? { id: team.id, nombre: team.nombre } : null,
     };
   }
 

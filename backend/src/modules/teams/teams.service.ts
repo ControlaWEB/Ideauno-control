@@ -8,7 +8,6 @@ type MemberDto = Parameters<AdvisorsService['create']>[0];
 
 interface CreateTeamDto {
   nombre: string;
-  email: string; // correo del login compartido del team
   clabeInterbancaria?: string;
   banco?: string;
   titularCuenta?: string;
@@ -25,25 +24,21 @@ export class TeamsService {
     private advisorsService: AdvisorsService,
   ) {}
 
-  /** Crea un team nuevo: login compartido + fila teams + primer integrante. */
+  /**
+   * Crea un team nuevo: fila teams (nombre + cuenta bancaria compartida) +
+   * primer integrante (que tiene su PROPIO login, como cualquier asesor).
+   */
   async createTeam(dto: CreateTeamDto) {
-    // 1) Login compartido (una sola fila en usuarios)
-    const { userId, tempPassword } = await this.advisorsService.createSharedLogin(
-      dto.nombre,
-      dto.email,
-    );
-
-    // 2) Fila del team
     const teamId = 'TEAM-' + Math.floor(1000 + Math.random() * 9000);
     const fechaAlta =
       dto.fechaAltaTeam ?? new Date().toISOString().split('T')[0];
+    // user_id queda NULL: el team no tiene login propio, cada integrante sí.
     await this.db.query(
       `INSERT INTO public.teams
          (id, user_id, nombre, status, meta_ama, clabe_interbancaria, banco, titular_cuenta, fecha_alta_team)
-       VALUES (@id, @userId, @nombre, 'Activo', @metaAma, @clabe, @banco, @titular, @fechaAlta)`,
+       VALUES (@id, NULL, @nombre, 'Activo', @metaAma, @clabe, @banco, @titular, @fechaAlta)`,
       {
         id: teamId,
-        userId,
         nombre: dto.nombre,
         metaAma: dto.metaAma ?? 0,
         clabe: dto.clabeInterbancaria ?? '',
@@ -53,7 +48,7 @@ export class TeamsService {
       },
     );
 
-    // 3) Primer integrante (advisor con team_id, user_id NULL)
+    // Primer integrante: advisor con team_id y su propio login/contraseña.
     const member = await this.advisorsService.create(dto.primerIntegrante, {
       teamId,
     });
@@ -65,7 +60,7 @@ export class TeamsService {
       details: { teamId, nombre: dto.nombre, primerIntegrante: member.id },
     });
 
-    return { teamId, userId, tempPassword, member };
+    return { teamId, member };
   }
 
   /** Agrega un integrante a un team existente. */

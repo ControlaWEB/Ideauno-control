@@ -65,6 +65,7 @@ export function AdvisorDashboard({ advisorId, advisorName, viewingAsAdmin, heade
   const amaAlcanzada = ama?.ama_alcanzada === true || ama?.ama_alcanzada === 'true';
   const ops: any[] = s.ultimasCuatroOps ?? [];
   const adv = s.advisor ?? null;
+  const team = s.team ?? null; // si el asesor pertenece a un team, todo viene agregado
   const statusBadge: Record<string, string> = {
     Activo: 'badge-success',
     'En mentoría': 'badge-warning',
@@ -78,11 +79,23 @@ export function AdvisorDashboard({ advisorId, advisorName, viewingAsAdmin, heade
         {/* ─── Page header ─── */}
         <div className="page-header" style={{ marginBottom: 20 }}>
           <div>
-            <h1 className="page-title">{viewingAsAdmin ? `Dashboard de ${advisorName ?? 'asesor'}` : 'Mi Dashboard'}</h1>
-            <p className="page-desc">{viewingAsAdmin ? 'Vista de administrador' : `Bienvenido, ${user?.name}`}</p>
+            <h1 className="page-title">
+              {team ? `Dashboard del Team ${team.nombre}` : viewingAsAdmin ? `Dashboard de ${advisorName ?? 'asesor'}` : 'Mi Dashboard'}
+            </h1>
+            <p className="page-desc">
+              {team ? 'Datos combinados de todos los integrantes del equipo'
+                : viewingAsAdmin ? 'Vista de administrador' : `Bienvenido, ${user?.name}`}
+            </p>
           </div>
           {headerExtra}
         </div>
+
+        {/* Aviso de que la vista es del team completo */}
+        {team && (
+          <div className="stat-chip" style={{ marginBottom: 16, color: 'var(--color-primary)', border: '1px solid var(--color-secondary)' }}>
+            <Users size={13} /> Vista de equipo: sumas de todos los integrantes de {team.nombre}
+          </div>
+        )}
 
         {/* ─── Encabezado de perfil del asesor ─── */}
         {adv && (

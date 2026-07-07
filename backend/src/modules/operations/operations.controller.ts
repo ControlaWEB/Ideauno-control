@@ -198,16 +198,17 @@ export class OperationsController {
 
   @Get()
   findAll(@Request() req: any, @Query() query: FindOperationsQueryDto) {
-    const advisorId =
-      req.user.role === 'Asesor'
-        ? (req.user.advisorId ?? undefined)
-        : undefined;
+    const isAsesor = req.user.role === 'Asesor';
+    // Integrante de team ve las operaciones de todo el equipo; asesor solo, las suyas.
+    const teamId = isAsesor ? (req.user.teamId ?? undefined) : undefined;
+    const advisorId = isAsesor && !teamId ? (req.user.advisorId ?? undefined) : undefined;
     return this.operationsService.findAll({
       page: query.page ?? 1,
       limit: query.limit ?? 10,
       status: query.status,
       type: query.type,
       advisorId,
+      teamId,
     });
   }
 
@@ -216,13 +217,15 @@ export class OperationsController {
     @Request() req: any,
     @Query() query: FindCommissionsQueryDto,
   ) {
-    // Asesor solo ve sus propias comisiones, sin importar el query param
-    const advisorId =
-      req.user.role === 'Asesor'
-        ? (req.user.advisorId ?? '-')
-        : query.advisorId;
+    const isAsesor = req.user.role === 'Asesor';
+    // Team: ve las comisiones de todo el equipo. Asesor solo: solo las suyas (ignora query).
+    const teamId = isAsesor ? (req.user.teamId ?? undefined) : undefined;
+    const advisorId = isAsesor
+      ? (teamId ? undefined : (req.user.advisorId ?? '-'))
+      : query.advisorId;
     return this.operationsService.findAllCommissions({
       advisorId,
+      teamId,
       status: query.status,
       type: query.type,
       page: query.page ?? 1,

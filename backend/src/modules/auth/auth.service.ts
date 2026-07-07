@@ -44,14 +44,16 @@ export class AuthService {
       throw new UnauthorizedException('Cuenta suspendida o inactiva.');
     }
 
-    // Resolve advisor ID if role is Asesor
+    // Resolve advisor ID (y su team) if role is Asesor
     let advisorId: string | null = null;
+    let teamId: string | null = null;
     if (user.role === 'Asesor') {
       const advRows = await this.databaseService.query<any>(
-        `SELECT id FROM public.advisors WHERE user_id = @uid LIMIT 1`,
+        `SELECT id, team_id FROM public.advisors WHERE user_id = @uid LIMIT 1`,
         { uid: user.id },
       );
       advisorId = advRows[0]?.id ?? null;
+      teamId = advRows[0]?.team_id ?? null;
     }
 
     const payload = {
@@ -60,6 +62,7 @@ export class AuthService {
       name: user.name,
       role: user.role,
       advisorId,
+      teamId,
     };
 
     const jwtSecret = process.env.JWT_SECRET;
@@ -87,6 +90,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
         advisorId,
+        teamId,
         avatarUrl: user.avatar_url,
       },
     };
@@ -102,13 +106,14 @@ export class AuthService {
           })(),
       });
 
-      // Conservar advisorId: sin él, los checks de propiedad de Asesor fallan tras el refresh
+      // Conservar advisorId y teamId: sin ellos, los checks de propiedad y el scope de team fallan tras el refresh
       const newPayload = {
         id: payload.id,
         email: payload.email,
         name: payload.name,
         role: payload.role,
         advisorId: payload.advisorId ?? null,
+        teamId: payload.teamId ?? null,
       };
       const accessToken = await this.jwtService.signAsync(newPayload, {
         secret:
@@ -136,15 +141,17 @@ export class AuthService {
     const user = rows[0];
 
     let advisorId: string | null = null;
+    let teamId: string | null = null;
     if (user.role === 'Asesor') {
       const advRows = await this.databaseService.query<any>(
-        `SELECT id FROM public.advisors WHERE user_id = @uid LIMIT 1`,
+        `SELECT id, team_id FROM public.advisors WHERE user_id = @uid LIMIT 1`,
         { uid: user.id },
       );
       advisorId = advRows[0]?.id ?? null;
+      teamId = advRows[0]?.team_id ?? null;
     }
 
-    return { ...user, advisorId };
+    return { ...user, advisorId, teamId };
   }
 
   async register(name: string, email: string, pass: string, role: string) {
