@@ -12,6 +12,7 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsNotEmpty,
@@ -65,6 +66,7 @@ class TeamMemberDto {
   })
   status: string;
 
+  @IsOptional() @IsBoolean() pasaPorMentoria?: boolean;
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) inviteByAdvisorId?: string;
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) idMentor?: string;
   @IsOptional() @IsString() @MaxLength(MAX_NOMBRE) nombreBeneficiario?: string;
