@@ -125,8 +125,9 @@ export default function NewAdvisorPage() {
   const [teamClabe, setTeamClabe] = useState('');
   const [teamBanco, setTeamBanco] = useState('');
   const [teamTitular, setTeamTitular] = useState('');
-  const [teamMetaAma, setTeamMetaAma] = useState('');
-  const [lastMemberName, setLastMemberName] = useState('');
+  const [teamCount, setTeamCount] = useState('2');   // cuántos integrantes tendrá el team
+  const [memberIndex, setMemberIndex] = useState(0); // integrantes ya guardados
+  const [createdMembers, setCreatedMembers] = useState<{ name: string; email: string; tempPassword: string }[]>([]);
 
   const { data: advisorsData } = useQuery({
     queryKey: ['advisors'],
@@ -199,9 +200,12 @@ export default function NewAdvisorPage() {
     const requiredDocs = DOC_SLOTS.filter((s) => s.required).map((s) => ({ key: s.key, label: s.label }));
     if (!ensureRequiredDocs(files as Record<string, File | undefined>, requiredDocs)) return;
 
-    // Validar encabezado del team al crearlo
+    const total = Math.max(1, Number(teamCount) || 1);
+
+    // Validar encabezado del team al crearlo (primer integrante)
     if (mode === 'team' && !teamId) {
       if (!teamNombre.trim()) { notify.error('El nombre del Team es requerido.'); return; }
+      if (!Number(teamCount) || Number(teamCount) < 1) { notify.error('Indica cuántos integrantes tendrá el team.'); return; }
     }
 
     try {
@@ -215,34 +219,42 @@ export default function NewAdvisorPage() {
         setSuccess(true);
         notify.success('Asesor registrado correctamente.');
         setTimeout(() => router.push('/advisors'), 8000);
+        return;
+      }
 
-      } else if (!teamId) {
-        // Crear team nuevo + primer integrante (con su propio login)
+      // ── Modo Team: cada integrante = alta independiente con su propio login,
+      //    misma cuenta bancaria del team. Se capturan N (uno tras otro).
+      let memberCreds = { name: data.name, email: data.email, tempPassword: '' };
+      if (!teamId) {
         const res = await teamsApi.create({
           nombre:             teamNombre.trim(),
           clabeInterbancaria: teamClabe || undefined,
           banco:              teamBanco || undefined,
           titularCuenta:      teamTitular || undefined,
-          metaAma:            teamMetaAma ? Number(teamMetaAma) : undefined,
+          metaAma:            total * 180000,       // meta estándar por integrante
           primerIntegrante:   member,
         });
-        await uploadMemberDocs(res.data?.member?.id);
         setTeamId(res.data?.teamId ?? null);
-        setCreatedEmail(data.email);                              // login propio del integrante
-        setTempPassword(res.data?.member?.tempPassword ?? '');
-        setLastMemberName(data.name);
-        setSuccess(true);
-        notify.success('Team creado con su primer integrante.');
-
+        await uploadMemberDocs(res.data?.member?.id);
+        memberCreds.tempPassword = res.data?.member?.tempPassword ?? '';
       } else {
-        // Agregar integrante a un team ya creado (con su propio login)
         const res = await teamsApi.addMember(teamId, member);
         await uploadMemberDocs(res.data?.id);
-        setCreatedEmail(data.email);
-        setTempPassword(res.data?.tempPassword ?? '');
-        setLastMemberName(data.name);
-        setSuccess(true);
-        notify.success('Integrante agregado al Team.');
+        memberCreds.tempPassword = res.data?.tempPassword ?? '';
+      }
+
+      const savedMembers = [...createdMembers, memberCreds];
+      const savedIndex = memberIndex + 1;
+      setCreatedMembers(savedMembers);
+      setMemberIndex(savedIndex);
+
+      if (savedIndex < total) {
+        // Faltan integrantes: limpiar formulario y documentos para el siguiente.
+        resetForNext();
+        notify.success(`Integrante ${savedIndex} de ${total} guardado. Captura el siguiente.`);
+      } else {
+        setSuccess(true); // todos capturados → resumen
+        notify.success('Team completo. Todos los integrantes registrados.');
       }
     } catch {
       // El error se muestra como toast flotante global (interceptor de axios).
@@ -251,12 +263,12 @@ export default function NewAdvisorPage() {
     }
   };
 
-  // Limpia el formulario para capturar otro integrante del mismo team.
-  const addAnotherMember = () => {
+  // Limpia el formulario y documentos para capturar al siguiente integrante.
+  const resetForNext = () => {
     reset({ tieneInvitador: 'no', pasaPorMentoria: 'no', status: 'Activo', curp: '', rfc: '' });
     setFiles({});
     Object.values(fileRefs.current).forEach((r) => { if (r) r.value = ''; });
-    setSuccess(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   if (success) {
@@ -275,43 +287,47 @@ export default function NewAdvisorPage() {
             <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 8 }}>
               {mode === 'individual'
                 ? 'Asesor Registrado Exitosamente'
-                : (tempPassword ? `Team "${teamNombre}" creado` : `Integrante agregado al Team`)}
+                : `Team "${teamNombre}" creado con ${createdMembers.length} integrante(s)`}
             </h2>
-            {lastMemberName && (
-              <p style={{ fontSize: 13, color: 'var(--color-on-surface-variant)', marginBottom: 8 }}>
-                Integrante: <strong>{lastMemberName}</strong>{teamId ? ` · Team ${teamId}` : ''}
-              </p>
-            )}
 
-            {/* Credenciales: solo cuando se creó un login (individual, o team recién creado) */}
-            {tempPassword && (
+            {/* Individual: credenciales del asesor */}
+            {mode === 'individual' && (
               <div style={{ background: '#fef9ec', border: '1px solid #d1b78a', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>
-                  {mode === 'individual' ? 'CREDENCIALES DE ACCESO — compartir con el asesor' : 'CREDENCIALES DEL INTEGRANTE — su propio acceso'}
-                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>CREDENCIALES DE ACCESO — compartir con el asesor</div>
                 <div style={{ fontSize: 13 }}>
-                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Correo: </span>
-                  <strong>{createdEmail}</strong>
+                  <span style={{ color: 'var(--color-on-surface-variant)' }}>Correo: </span><strong>{createdEmail}</strong>
                 </div>
                 <div style={{ fontSize: 13, marginTop: 4 }}>
                   <span style={{ color: 'var(--color-on-surface-variant)' }}>Contraseña temporal: </span>
                   <strong style={{ fontFamily: 'monospace', letterSpacing: 1 }}>{tempPassword || '(enviada por correo)'}</strong>
                 </div>
+              </div>
+            )}
+
+            {/* Team: resumen de credenciales de cada integrante (cada uno entra por separado) */}
+            {mode === 'team' && (
+              <div style={{ background: '#fef9ec', border: '1px solid #d1b78a', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>
+                  CREDENCIALES POR INTEGRANTE — cada uno entra por separado
+                </div>
+                {createdMembers.map((m, i) => (
+                  <div key={i} style={{ padding: '8px 0', borderBottom: i < createdMembers.length - 1 ? '1px solid #e7d9b8' : 'none' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>{i + 1}. {m.name}</div>
+                    <div style={{ fontSize: 12.5, color: 'var(--color-on-surface-variant)' }}>
+                      {m.email} · <strong style={{ fontFamily: 'monospace' }}>{m.tempPassword || '(enviada por correo)'}</strong>
+                    </div>
+                  </div>
+                ))}
                 <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)', marginTop: 8 }}>
-                  Se deberá cambiar la contraseña al primer inicio de sesión.
+                  Cuenta bancaria compartida del team. Cada quien cambia su contraseña al primer login.
                 </div>
               </div>
             )}
 
             {mode === 'team' ? (
-              <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 8 }}>
-                <button className="btn btn-primary" onClick={addAnotherMember}>
-                  + Agregar otro integrante
-                </button>
-                <button className="btn btn-secondary" onClick={() => router.push('/advisors')}>
-                  Terminar
-                </button>
-              </div>
+              <button className="btn btn-primary" onClick={() => router.push('/advisors')}>
+                Terminar
+              </button>
             ) : (
               <p style={{ fontSize: 13, color: 'var(--color-on-surface-variant)' }}>
                 Redirigiendo al listado de asesores...
@@ -372,20 +388,24 @@ export default function NewAdvisorPage() {
             </div>
             {mode === 'team' && teamId && (
               <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginTop: 10 }}>
-                Agregando integrantes al team <strong>{teamNombre || teamId}</strong>. Cada integrante llena su propio formulario y documentos.
+                Team <strong>{teamNombre || teamId}</strong> · cuenta bancaria compartida. Cada integrante tiene su propio usuario y documentos.
               </div>
             )}
           </div>
 
-          {/* ─── Datos del Team (solo al crear el team) ─── */}
+          {/* ─── Datos del Team (solo al crear el team, antes del primer integrante) ─── */}
           {mode === 'team' && !teamId && (
             <div className="card">
               <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4, color: 'var(--color-primary)' }}>Datos del Team</div>
-              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>Nombre y cuenta bancaria compartida del equipo. Cada integrante tiene su propio usuario.</div>
+              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>Nombre, cantidad de integrantes y cuenta bancaria compartida. Cada integrante se da de alta por separado con sus propios datos y documentos.</div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="input-group">
                   <label className="input-label">Nombre del Team *</label>
                   <input className="input" value={teamNombre} onChange={(e) => setTeamNombre(e.target.value)} placeholder="Ej: Equipo Norte" />
+                </div>
+                <div className="input-group">
+                  <label className="input-label">¿Cuántos integrantes? *</label>
+                  <input className="input" value={teamCount} onChange={(e) => setTeamCount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" maxLength={2} placeholder="Ej: 3" />
                 </div>
                 <div className="input-group">
                   <label className="input-label">CLABE interbancaria</label>
@@ -399,14 +419,17 @@ export default function NewAdvisorPage() {
                   <label className="input-label">Titular de la cuenta</label>
                   <input className="input" value={teamTitular} onChange={(e) => setTeamTitular(e.target.value)} placeholder="Nombre del titular" />
                 </div>
-                <div className="input-group">
-                  <label className="input-label">Meta AMA del team ($)</label>
-                  <input className="input" value={teamMetaAma} onChange={(e) => setTeamMetaAma(e.target.value)} inputMode="numeric" placeholder="0" />
-                </div>
               </div>
               <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 10 }}>
-                Abajo capturas al <strong>primer integrante</strong> con sus documentos. Después podrás agregar más.
+                Abajo capturas al <strong>integrante 1 de {Math.max(1, Number(teamCount) || 1)}</strong> con sus documentos. Al guardar, el formulario se repite para el siguiente.
               </div>
+            </div>
+          )}
+
+          {/* ─── Progreso del team (capturando integrantes) ─── */}
+          {mode === 'team' && (
+            <div className="stat-chip" style={{ alignSelf: 'flex-start', color: 'var(--color-primary)', border: '1px solid var(--color-secondary)' }}>
+              <Users size={13} /> Integrante {memberIndex + 1} de {Math.max(1, Number(teamCount) || 1)} — {teamNombre || 'nuevo team'}
             </div>
           )}
 
@@ -642,7 +665,7 @@ export default function NewAdvisorPage() {
             <button type="submit" className="btn btn-primary" disabled={isSubmitting || uploading}>
               {isSubmitting ? 'Guardando...' : uploading ? 'Subiendo documentos...'
                 : mode === 'individual' ? 'Registrar Asesor'
-                : teamId ? 'Agregar integrante' : 'Crear Team y primer integrante'}
+                : `Guardar integrante ${memberIndex + 1} de ${Math.max(1, Number(teamCount) || 1)}`}
             </button>
           </div>
 
