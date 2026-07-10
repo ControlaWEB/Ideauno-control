@@ -179,6 +179,8 @@ export const notificationsApi = {
 export const advisorsApi = {
   getAll: (params?: Record<string, unknown>) => api.get('/advisors', { params }),
   getOne: (id: string) => api.get(`/advisors/${id}`),
+  // Usuarios que pueden recibir un perfil de asesor (admin que también vende).
+  linkableUsers: () => api.get('/advisors/linkable-users'),
   create: (data: Record<string, unknown>) => api.post('/advisors', data),
   update: (id: string, data: Record<string, unknown>) => api.patch(`/advisors/${id}`, data),
   updateStatus: (id: string, status: string, motivo_baja?: string, fecha_baja?: string) =>

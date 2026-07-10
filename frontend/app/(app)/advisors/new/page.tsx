@@ -120,6 +120,12 @@ export default function NewAdvisorPage() {
 
   // ─── Modo Team ───
   const [mode, setMode] = useState<'individual' | 'team'>('individual');
+  // Modo "ligar": crear el perfil de asesor para un usuario que ya existe
+  // (p. ej. un administrador que también vende) en vez de un login nuevo.
+  const [linkMode, setLinkMode] = useState(false);
+  const [linkUsers, setLinkUsers] = useState<{ id: string; name: string; email: string; role: string }[]>([]);
+  const [linkUserId, setLinkUserId] = useState('');
+  const [linked, setLinked] = useState(false);
   const [teamId, setTeamId] = useState<string | null>(null); // set cuando el team ya se creó
   const [teamNombre, setTeamNombre] = useState('');
   const [teamClabe, setTeamClabe] = useState('');
@@ -195,6 +201,30 @@ export default function NewAdvisorPage() {
     }
   };
 
+  // Activa/desactiva el modo "ligar" y carga los usuarios ligables la 1ª vez.
+  const toggleLinkMode = async (on: boolean) => {
+    setLinkMode(on);
+    if (!on) { setLinkUserId(''); return; }
+    if (linkUsers.length === 0) {
+      try {
+        const res = await advisorsApi.linkableUsers();
+        setLinkUsers(res.data ?? []);
+      } catch {
+        // el error se muestra como toast global
+      }
+    }
+  };
+
+  // Al elegir un usuario, prellena nombre y correo con los de su cuenta.
+  const selectLinkUser = (id: string) => {
+    setLinkUserId(id);
+    const u = linkUsers.find((x) => x.id === id);
+    if (u) {
+      setValue('name', u.name, { shouldValidate: true });
+      setValue('email', u.email, { shouldValidate: true });
+    }
+  };
+
   const onSubmit = async (data: FormData) => {
     // Documentos obligatorios (marcados con * en DOC_SLOTS)
     const requiredDocs = DOC_SLOTS.filter((s) => s.required).map((s) => ({ key: s.key, label: s.label }));
@@ -208,16 +238,26 @@ export default function NewAdvisorPage() {
       if (!Number(teamCount) || Number(teamCount) < 1) { notify.error('Indica cuántos integrantes tendrá el team.'); return; }
     }
 
+    // En modo ligar hay que haber elegido la cuenta.
+    if (mode === 'individual' && linkMode && !linkUserId) {
+      notify.error('Selecciona la cuenta existente a la que ligar el perfil.');
+      return;
+    }
+
     try {
       const member = buildMemberPayload(data);
+      if (mode === 'individual' && linkMode) member.linkUserId = linkUserId;
 
       if (mode === 'individual') {
         const res = await advisorsApi.create(member);
         await uploadMemberDocs(res.data?.id);
         setCreatedEmail(data.email);
         setTempPassword(res.data?.tempPassword ?? '');
+        setLinked(!!res.data?.linked);
         setSuccess(true);
-        notify.success('Asesor registrado correctamente.');
+        notify.success(res.data?.linked
+          ? 'Perfil de asesor ligado a la cuenta existente.'
+          : 'Asesor registrado correctamente.');
         setTimeout(() => router.push('/advisors'), 8000);
         return;
       }
@@ -286,12 +326,22 @@ export default function NewAdvisorPage() {
             </div>
             <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 8 }}>
               {mode === 'individual'
-                ? 'Asesor Registrado Exitosamente'
+                ? (linked ? 'Perfil de Asesor Ligado' : 'Asesor Registrado Exitosamente')
                 : `Team "${teamNombre}" creado con ${createdMembers.length} integrante(s)`}
             </h2>
 
-            {/* Individual: credenciales del asesor */}
-            {mode === 'individual' && (
+            {/* Individual ligado: sin credenciales nuevas, usa su cuenta actual */}
+            {mode === 'individual' && linked && (
+              <div style={{ background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#065f46', marginBottom: 6 }}>PERFIL LIGADO A CUENTA EXISTENTE</div>
+                <div style={{ fontSize: 13 }}>
+                  <strong>{createdEmail}</strong> ya tenía cuenta. Entra con su login de siempre y ahora también verá su Mi Dashboard y comisiones como asesor. No hay contraseña nueva.
+                </div>
+              </div>
+            )}
+
+            {/* Individual nuevo: credenciales del asesor */}
+            {mode === 'individual' && !linked && (
               <div style={{ background: '#fef9ec', border: '1px solid #d1b78a', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 6 }}>CREDENCIALES DE ACCESO — compartir con el asesor</div>
                 <div style={{ fontSize: 13 }}>
@@ -389,6 +439,34 @@ export default function NewAdvisorPage() {
             {mode === 'team' && teamId && (
               <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginTop: 10 }}>
                 Team <strong>{teamNombre || teamId}</strong> · cuenta bancaria compartida. Cada integrante tiene su propio usuario y documentos.
+              </div>
+            )}
+
+            {/* Ligar a una cuenta existente (admin que también vende) */}
+            {mode === 'individual' && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--color-outline-variant)' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13 }}>
+                  <input type="checkbox" checked={linkMode} onChange={(e) => toggleLinkMode(e.target.checked)} />
+                  Ligar a una cuenta existente <span style={{ color: 'var(--color-on-surface-variant)' }}>(ej. un administrador que también vende)</span>
+                </label>
+                {linkMode && (
+                  <div className="input-group" style={{ marginTop: 10 }}>
+                    <label className="input-label">Cuenta a ligar *</label>
+                    <select
+                      className="input"
+                      value={linkUserId}
+                      onChange={(e) => selectLinkUser(e.target.value)}
+                    >
+                      <option value="">— Selecciona un usuario —</option>
+                      {linkUsers.map((u) => (
+                        <option key={u.id} value={u.id}>{u.name} · {u.email} ({u.role})</option>
+                      ))}
+                    </select>
+                    <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 6 }}>
+                      No se crea un login nuevo: esta persona entrará con su cuenta de siempre y además tendrá su Mi Dashboard y comisiones como asesor. Captura sus datos y documentos abajo.
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

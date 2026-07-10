@@ -142,6 +142,10 @@ class CreateAdvisorDto {
   @IsOptional() @IsBoolean() pasaPorMentoria?: boolean;
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) idMentor?: string;
 
+  // Si viene, el perfil de asesor se liga a un usuario existente (un admin que
+  // también vende) en vez de crear un login nuevo.
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) linkUserId?: string;
+
   @IsOptional()
   @EmptyToUndefined()
   @Transform(trim)
@@ -241,6 +245,13 @@ export class AdvisorsController {
     return this.advisorsService.findAll(status);
   }
 
+  // Debe ir ANTES de @Get(':id') o Nest lo tomaría como un id.
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('linkable-users')
+  async linkableUsers() {
+    return this.advisorsService.listLinkableUsers();
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     return this.advisorsService.findOne(id);
@@ -249,7 +260,8 @@ export class AdvisorsController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @Post()
   async create(@Body() body: CreateAdvisorDto) {
-    return this.advisorsService.create(body);
+    const { linkUserId, ...dto } = body;
+    return this.advisorsService.create(dto, { linkUserId });
   }
 
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)

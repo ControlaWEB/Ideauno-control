@@ -44,10 +44,12 @@ export class AuthService {
       throw new UnauthorizedException('Cuenta suspendida o inactiva.');
     }
 
-    // Resolve advisor ID (y su team) if role is Asesor
+    // Resolve advisor ID (y su team). Se busca para CUALQUIER rol: un
+    // administrador que también vende (p. ej. el dueño) puede tener un perfil
+    // de asesor ligado a su misma cuenta. Si no hay perfil ligado, queda null.
     let advisorId: string | null = null;
     let teamId: string | null = null;
-    if (user.role === 'Asesor') {
+    {
       const advRows = await this.databaseService.query<any>(
         `SELECT id, team_id FROM public.advisors WHERE user_id = @uid LIMIT 1`,
         { uid: user.id },
@@ -140,9 +142,11 @@ export class AuthService {
     if (!rows.length) throw new UnauthorizedException('Usuario no encontrado.');
     const user = rows[0];
 
+    // advisorId para cualquier rol: un admin con perfil de asesor ligado
+    // también actúa como asesor (ver login()).
     let advisorId: string | null = null;
     let teamId: string | null = null;
-    if (user.role === 'Asesor') {
+    {
       const advRows = await this.databaseService.query<any>(
         `SELECT id, team_id FROM public.advisors WHERE user_id = @uid LIMIT 1`,
         { uid: user.id },

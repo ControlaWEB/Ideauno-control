@@ -155,30 +155,60 @@ export class AdvisorsService {
     telefonoBeneficiario?: string;
     correoBeneficiario?: string;
     observaciones?: string;
-  }, opts: { teamId?: string } = {}) {
+  }, opts: { teamId?: string; linkUserId?: string } = {}) {
     // Cada integrante de un Team tiene su PROPIO login (entra por separado).
     // team_id solo lo agrupa para dashboard/pagos; no comparte usuario.
     const isTeamMember = !!opts.teamId;
+    // Modo "ligar": el perfil de asesor se conecta a un usuario que YA existe
+    // (p. ej. un administrador que también vende). No se crea login nuevo ni se
+    // envía correo de credenciales; reutiliza la cuenta actual.
+    const linkUserId = opts.linkUserId;
 
-    // Evitar 500 por violación de unicidad: verificar duplicado y responder 409
-    const dup = await this.databaseService.query<any>(
-      `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
-      { email: dto.email.trim().toLowerCase() },
-    );
-    if (dup.length > 0) {
-      throw new ConflictException(
-        'Ya existe un usuario registrado con ese correo electrónico.',
+    let userId: string;
+    let tempPassword: string | null = null;
+    let advisorEmail = dto.email;
+
+    if (linkUserId) {
+      const [account] = await this.databaseService.query<any>(
+        `SELECT id, email FROM public.usuarios WHERE id = @uid LIMIT 1`,
+        { uid: linkUserId },
+      );
+      if (!account) {
+        throw new NotFoundException('El usuario a ligar no existe.');
+      }
+      // El perfil de asesor hereda el correo de la cuenta ligada.
+      if (!advisorEmail?.trim()) advisorEmail = account.email;
+      const [existing] = await this.databaseService.query<any>(
+        `SELECT id FROM public.advisors WHERE user_id = @uid LIMIT 1`,
+        { uid: linkUserId },
+      );
+      if (existing) {
+        throw new ConflictException(
+          'Esa cuenta ya tiene un perfil de asesor ligado.',
+        );
+      }
+      userId = linkUserId;
+    } else {
+      // Evitar 500 por violación de unicidad: verificar duplicado y responder 409
+      const dup = await this.databaseService.query<any>(
+        `SELECT id FROM public.usuarios WHERE LOWER(email) = @email LIMIT 1`,
+        { email: dto.email.trim().toLowerCase() },
+      );
+      if (dup.length > 0) {
+        throw new ConflictException(
+          'Ya existe un usuario registrado con ese correo electrónico.',
+        );
+      }
+      // Password temporal aleatoria (se envía por correo, no queda hardcodeada)
+      tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
+      userId = randomUUID();
+      const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
+      await this.databaseService.query(
+        `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
+         VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
+        { userId, name: dto.name, email: dto.email, hash: tempPasswordHash },
       );
     }
-    // Password temporal aleatoria (se envía por correo, no queda hardcodeada)
-    const tempPassword = 'Idea-' + randomUUID().slice(0, 8) + '!';
-    const userId = randomUUID();
-    const tempPasswordHash = await bcrypt.hash(tempPassword, 10);
-    await this.databaseService.query(
-      `INSERT INTO public.usuarios (id, name, email, password_hash, role, status, avatar_url)
-       VALUES (@userId, @name, @email, @hash, 'Asesor', 'Active', '')`,
-      { userId, name: dto.name, email: dto.email, hash: tempPasswordHash },
-    );
 
     const id = 'ADV-' + Math.floor(1000 + Math.random() * 9000);
 
@@ -199,7 +229,7 @@ export class AdvisorsService {
       userId,
       teamId: opts.teamId ?? null,
       name: dto.name,
-      email: dto.email,
+      email: advisorEmail,
       phone: dto.phone || '',
       rfc: dto.rfc || '',
       curp: dto.curp || '',
@@ -251,18 +281,45 @@ export class AdvisorsService {
       },
     );
 
-    // Cada asesor (individual o integrante de team) recibe su propio login.
-    await this.emailService.send(
-      [dto.email],
-      isTeamMember ? 'Alta de integrante de equipo' : 'Alta de nuevo asesor',
-      `<p>Se creó una cuenta de asesor en el sistema.</p>
-       <p><strong>Asesor:</strong> ${dto.name}<br/>
-       <strong>Correo:</strong> ${dto.email}<br/>
-       <strong>Contraseña temporal:</strong> ${tempPassword}</p>
-       <p>El asesor deberá cambiar la contraseña al iniciar sesión por primera vez.</p>`,
-    );
+    // Al ligar a una cuenta existente no hay credenciales nuevas que enviar:
+    // el usuario entra con su login de siempre. El correo solo va cuando se
+    // crea un login nuevo (asesor individual o integrante de team).
+    if (!linkUserId) {
+      await this.emailService.send(
+        [advisorEmail],
+        isTeamMember ? 'Alta de integrante de equipo' : 'Alta de nuevo asesor',
+        `<p>Se creó una cuenta de asesor en el sistema.</p>
+         <p><strong>Asesor:</strong> ${dto.name}<br/>
+         <strong>Correo:</strong> ${advisorEmail}<br/>
+         <strong>Contraseña temporal:</strong> ${tempPassword}</p>
+         <p>El asesor deberá cambiar la contraseña al iniciar sesión por primera vez.</p>`,
+      );
+    }
 
-    return { id, userId, tempPassword, teamId: opts.teamId ?? null, ...dto };
+    return {
+      id,
+      userId,
+      tempPassword,
+      linked: !!linkUserId,
+      teamId: opts.teamId ?? null,
+      ...dto,
+    };
+  }
+
+  /**
+   * Usuarios que pueden recibir un perfil de asesor: cuentas activas que aún no
+   * tienen uno ligado (p. ej. un administrador que también va a vender).
+   */
+  async listLinkableUsers() {
+    return this.databaseService.query<any>(
+      `SELECT u.id, u.name, u.email, u.role
+         FROM public.usuarios u
+        WHERE u.status = 'Active'
+          AND NOT EXISTS (
+            SELECT 1 FROM public.advisors a WHERE a.user_id = u.id
+          )
+        ORDER BY u.name`,
+    );
   }
 
   /**
