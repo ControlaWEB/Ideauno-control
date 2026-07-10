@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import sharp from 'sharp';
 import { DatabaseService } from '../../database/database.service';
@@ -36,11 +37,20 @@ export class DocumentsService {
     let mimeType = file.mimetype;
 
     if (IMAGE_TYPES.includes(file.mimetype)) {
-      buffer = await sharp(file.buffer)
-        .resize({ width: MAX_WIDTH, withoutEnlargement: true })
-        .jpeg({ quality: JPEG_QUALITY })
-        .toBuffer();
-      mimeType = 'image/jpeg';
+      try {
+        buffer = await sharp(file.buffer)
+          .resize({ width: MAX_WIDTH, withoutEnlargement: true })
+          .jpeg({ quality: JPEG_QUALITY })
+          .toBuffer();
+        mimeType = 'image/jpeg';
+      } catch {
+        // sharp lanza si el archivo no es una imagen válida (corrupta o con
+        // extensión que no corresponde al contenido). Sin este catch, el
+        // usuario recibía un 500 opaco en vez de un mensaje accionable.
+        throw new BadRequestException(
+          `El archivo "${file.originalname}" no es una imagen válida. Sube un JPG, PNG o WEBP legible, o un PDF.`,
+        );
+      }
     }
 
     const ext =
