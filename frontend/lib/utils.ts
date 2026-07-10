@@ -17,7 +17,14 @@ export function formatCurrency(amount: number | null | undefined, currency = 'MX
 
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '—';
-  const d = new Date(dateStr);
+  // Una fecha sin hora (YYYY-MM-DD) la parsea `new Date` como medianoche UTC;
+  // al formatear en horario local (Hermosillo, UTC-7) se corre un día hacia
+  // atrás. Se construye como fecha local a partir de sus partes para que
+  // "1990-01-01" muestre 01 ene, no 31 dic. Los timestamps con hora se dejan.
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  const d = dateOnly
+    ? new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]))
+    : new Date(dateStr);
   // Fecha inválida: Intl.format lanzaría RangeError y tiraría la página
   if (Number.isNaN(d.getTime())) return '—';
   return new Intl.DateTimeFormat('es-MX', {
