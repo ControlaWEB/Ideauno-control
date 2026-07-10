@@ -17,12 +17,6 @@ const schema = z.object({
 });
 type Fields = z.infer<typeof schema>;
 
-/* ── Demo users ── */
-const DEMO = [
-  { email: 'admin@ideauno.com',              initials: 'AI', role: 'Admin',  color: '#d1b78a', bg: 'rgba(209,183,138,.14)' },
-  { email: 'angelramos@inmobiliaria.com.mx', initials: 'AR', role: 'Asesor', color: '#818cf8', bg: 'rgba(129,140,248,.14)' },
-];
-
 /* ── Inline style tokens ── */
 const S = {
   label: {
@@ -94,12 +88,10 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError]     = useState<string | null>(null);
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<Fields>({
+  const { register, handleSubmit, formState: { errors } } = useForm<Fields>({
     resolver: zodResolver(schema) as any,
     defaultValues: { email: '', password: '' },
   });
-
-  const activeEmail = watch('email');
 
   const onSubmit = async (data: Fields) => {
     setLoading(true);
@@ -115,13 +107,6 @@ export default function LoginPage() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Solo autollena el correo: la contraseña nunca debe vivir en el código del cliente
-  const fill = (email: string) => {
-    setValue('email', email, { shouldValidate: true });
-    setValue('password', '', { shouldValidate: false });
-    setError(null);
   };
 
   return (
@@ -227,60 +212,6 @@ export default function LoginPage() {
           ) : 'Continuar →'}
         </button>
       </form>
-
-      {/* ── Quick-access section ── */}
-      <div style={{ marginTop: 36 }}>
-
-        {/* Divider */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <div style={{ flex: 1, height: 1, background: '#1e3449' }} />
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', color: '#52697f', textTransform: 'uppercase' }}>
-            Acceso Demo
-          </span>
-          <div style={{ flex: 1, height: 1, background: '#1e3449' }} />
-        </div>
-
-        {/* Three demo cards */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          {DEMO.map(u => {
-            const isActive = activeEmail === u.email;
-            return (
-              <button
-                key={u.email}
-                type="button"
-                onClick={() => fill(u.email)}
-                aria-label={`Acceso demo como ${u.role}`}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
-                  padding: '16px 8px', borderRadius: 12, cursor: 'pointer',
-                  border: `1px solid ${isActive ? u.color + '44' : '#1e3449'}`,
-                  background: isActive ? u.bg : '#0d1824',
-                  boxShadow: isActive ? `0 0 20px ${u.color}18` : 'none',
-                  transition: 'all .15s',
-                  outline: 'none',
-                }}
-                onMouseOver={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = '#12202f'; }}
-                onMouseOut={e => { if (!isActive) (e.currentTarget as HTMLButtonElement).style.background = '#0d1824'; }}
-              >
-                {/* Avatar */}
-                <div style={{
-                  width: 40, height: 40, borderRadius: '50%',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  background: u.bg, border: `1.5px solid ${u.color}40`,
-                  fontSize: 12, fontWeight: 800, color: u.color, letterSpacing: '0.05em',
-                }}>
-                  {u.initials}
-                </div>
-                {/* Labels */}
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: '#e4e4e7', lineHeight: 1 }}>{u.role}</p>
-                  <p style={{ margin: '5px 0 0', fontSize: 10, color: '#3f3f46', fontFamily: 'monospace' }}>{u.email}</p>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
 
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
