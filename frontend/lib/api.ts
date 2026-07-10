@@ -20,10 +20,20 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Un 401 de /auth/login o /auth/refresh no es una sesión expirada: es un intento
+// de autenticación fallido. Redirigir ahí recarga la pantalla de login y borra el
+// mensaje de error antes de que el usuario alcance a leerlo.
+const isAuthEndpoint = (url?: string) =>
+  !!url && (url.includes('/auth/login') || url.includes('/auth/refresh'));
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
+    if (
+      error.response?.status === 401 &&
+      !isAuthEndpoint(error.config?.url) &&
+      typeof window !== 'undefined'
+    ) {
       const refresh = localStorage.getItem('refresh_token');
       if (refresh?.startsWith('mock-')) return Promise.reject(error);
       if (refresh) {
