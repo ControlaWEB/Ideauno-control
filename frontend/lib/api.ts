@@ -196,6 +196,11 @@ export const teamsApi = {
     api.post(`/teams/${teamId}/members`, data),
   getOne: (id: string) => api.get(`/teams/${id}`),
   getDocumentosPendientes: (id: string) => api.get(`/teams/${id}/documentos-pendientes`),
+  // Team con asesores que ya existen (no crea logins nuevos).
+  unteamedAdvisors: () => api.get('/teams/unteamed-advisors'),
+  createFromExisting: (data: Record<string, unknown>) => api.post('/teams/from-existing', data),
+  addExistingMember: (teamId: string, advisorId: string) =>
+    api.post(`/teams/${teamId}/existing-members`, { advisorId }),
 };
 
 // OPERATIONS (cierres)

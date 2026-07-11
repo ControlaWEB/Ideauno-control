@@ -134,6 +134,11 @@ export default function NewAdvisorPage() {
   const [teamCount, setTeamCount] = useState('2');   // cuántos integrantes tendrá el team
   const [memberIndex, setMemberIndex] = useState(0); // integrantes ya guardados
   const [createdMembers, setCreatedMembers] = useState<{ name: string; email: string; tempPassword: string }[]>([]);
+  // Team a partir de asesores que YA existen (no crea logins nuevos).
+  const [teamSource, setTeamSource] = useState<'new' | 'existing'>('new');
+  const [unteamed, setUnteamed] = useState<{ id: string; name: string; email: string; status: string }[]>([]);
+  const [pickedAdvisors, setPickedAdvisors] = useState<string[]>([]);
+  const [creatingExisting, setCreatingExisting] = useState(false);
 
   const { data: advisorsData } = useQuery({
     queryKey: ['advisors'],
@@ -222,6 +227,50 @@ export default function NewAdvisorPage() {
     if (u) {
       setValue('name', u.name, { shouldValidate: true });
       setValue('email', u.email, { shouldValidate: true });
+    }
+  };
+
+  const teamExistingMode = mode === 'team' && !teamId && teamSource === 'existing';
+
+  // Cambia entre "integrantes nuevos" y "asesores existentes"; carga la lista la 1ª vez.
+  const switchTeamSource = async (src: 'new' | 'existing') => {
+    setTeamSource(src);
+    if (src === 'existing' && unteamed.length === 0) {
+      try {
+        const res = await teamsApi.unteamedAdvisors();
+        setUnteamed(res.data ?? []);
+      } catch {
+        // toast global
+      }
+    }
+  };
+
+  const togglePicked = (id: string) => {
+    setPickedAdvisors((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  };
+
+  // Crea el team agrupando asesores que ya existen (sin crear logins).
+  const submitExistingTeam = async () => {
+    if (!teamNombre.trim()) { notify.error('El nombre del Team es requerido.'); return; }
+    if (pickedAdvisors.length < 1) { notify.error('Selecciona al menos un asesor.'); return; }
+    setCreatingExisting(true);
+    try {
+      const res = await teamsApi.createFromExisting({
+        nombre: teamNombre.trim(),
+        clabeInterbancaria: teamClabe || undefined,
+        banco: teamBanco || undefined,
+        titularCuenta: teamTitular || undefined,
+        advisorIds: pickedAdvisors,
+      });
+      setTeamId(res.data?.teamId ?? null);
+      setSuccess(true);
+      notify.success(`Team "${teamNombre}" creado con ${pickedAdvisors.length} asesor(es) existentes.`);
+    } catch {
+      // toast global
+    } finally {
+      setCreatingExisting(false);
     }
   };
 
@@ -327,7 +376,9 @@ export default function NewAdvisorPage() {
             <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 8 }}>
               {mode === 'individual'
                 ? (linked ? 'Perfil de Asesor Ligado' : 'Asesor Registrado Exitosamente')
-                : `Team "${teamNombre}" creado con ${createdMembers.length} integrante(s)`}
+                : teamSource === 'existing'
+                  ? `Team "${teamNombre}" creado con ${pickedAdvisors.length} asesor(es) existentes`
+                  : `Team "${teamNombre}" creado con ${createdMembers.length} integrante(s)`}
             </h2>
 
             {/* Individual ligado: sin credenciales nuevas, usa su cuenta actual */}
@@ -354,8 +405,18 @@ export default function NewAdvisorPage() {
               </div>
             )}
 
-            {/* Team: resumen de credenciales de cada integrante (cada uno entra por separado) */}
-            {mode === 'team' && (
+            {/* Team con existentes: sin credenciales nuevas, cada quien usa su login */}
+            {mode === 'team' && teamSource === 'existing' && (
+              <div style={{ background: '#ecfdf5', border: '1px solid #6ee7b7', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#065f46', marginBottom: 6 }}>ASESORES AGRUPADOS</div>
+                <div style={{ fontSize: 13 }}>
+                  Los asesores seleccionados ahora comparten cuenta bancaria y dashboard del team. Entran con su login de siempre; no hay contraseñas nuevas.
+                </div>
+              </div>
+            )}
+
+            {/* Team con integrantes nuevos: credenciales de cada uno (entra por separado) */}
+            {mode === 'team' && teamSource === 'new' && (
               <div style={{ background: '#fef9ec', border: '1px solid #d1b78a', borderRadius: 8, padding: '14px 18px', margin: '16px 0', textAlign: 'left' }}>
                 <div style={{ fontSize: 12, fontWeight: 700, color: '#92400e', marginBottom: 8 }}>
                   CREDENCIALES POR INTEGRANTE — cada uno entra por separado
@@ -474,17 +535,43 @@ export default function NewAdvisorPage() {
           {/* ─── Datos del Team (solo al crear el team, antes del primer integrante) ─── */}
           {mode === 'team' && !teamId && (
             <div className="card">
-              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 4, color: 'var(--color-primary)' }}>Datos del Team</div>
-              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>Nombre, cantidad de integrantes y cuenta bancaria compartida. Cada integrante se da de alta por separado con sus propios datos y documentos.</div>
+              <div style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 10, color: 'var(--color-primary)' }}>Datos del Team</div>
+
+              {/* Fuente de integrantes: nuevos o ya existentes */}
+              <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+                {([['new', 'Integrantes nuevos'], ['existing', 'Asesores existentes']] as const).map(([src, label]) => (
+                  <button
+                    key={src}
+                    type="button"
+                    onClick={() => switchTeamSource(src)}
+                    style={{
+                      flex: 1, padding: '10px', borderRadius: 8, cursor: 'pointer',
+                      border: `1.5px solid ${teamSource === src ? 'var(--color-primary)' : 'var(--color-outline-variant)'}`,
+                      background: teamSource === src ? 'var(--color-primary)' : 'var(--color-surface-container-lowest)',
+                      color: teamSource === src ? '#fff' : 'var(--color-on-surface)', fontWeight: 600, fontSize: 12.5,
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--color-on-surface-variant)', marginBottom: 14 }}>
+                {teamSource === 'new'
+                  ? 'Cada integrante se da de alta por separado, con su propio login y documentos.'
+                  : 'Agrupa asesores que ya están dados de alta (ej. dueños que también venden). No crea logins nuevos; comparten la cuenta bancaria y el dashboard del team.'}
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
                 <div className="input-group">
                   <label className="input-label">Nombre del Team *</label>
                   <input className="input" value={teamNombre} onChange={(e) => setTeamNombre(e.target.value)} placeholder="Ej: Equipo Norte" />
                 </div>
-                <div className="input-group">
-                  <label className="input-label">¿Cuántos integrantes? *</label>
-                  <input className="input" value={teamCount} onChange={(e) => setTeamCount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" maxLength={2} placeholder="Ej: 3" />
-                </div>
+                {teamSource === 'new' && (
+                  <div className="input-group">
+                    <label className="input-label">¿Cuántos integrantes? *</label>
+                    <input className="input" value={teamCount} onChange={(e) => setTeamCount(e.target.value.replace(/[^0-9]/g, ''))} inputMode="numeric" maxLength={2} placeholder="Ej: 3" />
+                  </div>
+                )}
                 <div className="input-group">
                   <label className="input-label">CLABE interbancaria</label>
                   <input className="input" value={teamClabe} onChange={(e) => setTeamClabe(e.target.value)} inputMode="numeric" maxLength={18} placeholder="18 dígitos" />
@@ -498,11 +585,46 @@ export default function NewAdvisorPage() {
                   <input className="input" value={teamTitular} onChange={(e) => setTeamTitular(e.target.value)} placeholder="Nombre del titular" />
                 </div>
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 10 }}>
-                Abajo capturas al <strong>integrante 1 de {Math.max(1, Number(teamCount) || 1)}</strong> con sus documentos. Al guardar, el formulario se repite para el siguiente.
-              </div>
+
+              {teamSource === 'new' && (
+                <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 10 }}>
+                  Abajo capturas al <strong>integrante 1 de {Math.max(1, Number(teamCount) || 1)}</strong> con sus documentos. Al guardar, el formulario se repite para el siguiente.
+                </div>
+              )}
+
+              {/* Selector de asesores existentes */}
+              {teamSource === 'existing' && (
+                <div style={{ marginTop: 16 }}>
+                  <label className="input-label">Asesores a agrupar * <span style={{ color: 'var(--color-on-surface-variant)' }}>({pickedAdvisors.length} seleccionado{pickedAdvisors.length === 1 ? '' : 's'})</span></label>
+                  {unteamed.length === 0 ? (
+                    <div style={{ fontSize: 12.5, color: 'var(--color-on-surface-variant)', padding: '12px 0' }}>
+                      No hay asesores libres para agrupar. Da de alta asesores (o liga cuentas de admin como asesor) primero.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6, maxHeight: 260, overflowY: 'auto' }}>
+                      {unteamed.map((a) => (
+                        <label key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${pickedAdvisors.includes(a.id) ? 'var(--color-primary)' : 'var(--color-outline-variant)'}`, background: pickedAdvisors.includes(a.id) ? 'var(--color-secondary-container, rgba(209,183,138,.12))' : 'transparent' }}>
+                          <input type="checkbox" checked={pickedAdvisors.includes(a.id)} onChange={() => togglePicked(a.id)} />
+                          <span style={{ fontSize: 13 }}>{a.name} · <span style={{ color: 'var(--color-on-surface-variant)' }}>{a.email}</span></span>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 8 }}>
+                    Meta AMA del team: <strong>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Math.max(1, pickedAdvisors.length) * 180000)}</strong> ({Math.max(1, pickedAdvisors.length)} × $180,000).
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+                    <button type="button" className="btn btn-primary" disabled={creatingExisting || pickedAdvisors.length < 1} onClick={submitExistingTeam}>
+                      {creatingExisting ? 'Creando team...' : `Crear team con ${pickedAdvisors.length || 0} asesor(es)`}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
+
+          {/* El formulario de datos del asesor no aplica al agrupar existentes */}
+          {!teamExistingMode && (<>
 
           {/* ─── Progreso del team (capturando integrantes) ─── */}
           {mode === 'team' && (
@@ -746,6 +868,8 @@ export default function NewAdvisorPage() {
                 : `Guardar integrante ${memberIndex + 1} de ${Math.max(1, Number(teamCount) || 1)}`}
             </button>
           </div>
+
+          </>)}
 
         </form>
       </div>

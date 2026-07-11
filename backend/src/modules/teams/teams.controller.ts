@@ -12,6 +12,8 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { UserRole } from '../../common/enums/role.enum';
 import {
+  IsArray,
+  ArrayNotEmpty,
   IsBoolean,
   IsEmail,
   IsIn,
@@ -106,6 +108,25 @@ class CreateTeamDto {
   primerIntegrante: TeamMemberDto;
 }
 
+// Crear un team a partir de asesores que YA existen (no crea logins).
+class CreateTeamFromExistingDto {
+  @Transform(trim) @IsNotEmpty() @IsString() @MaxLength(MAX_NOMBRE) nombre: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) clabeInterbancaria?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_NOMBRE) banco?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_NOMBRE) titularCuenta?: string;
+  @IsOptional() @IsString() @MaxLength(20) fechaAltaTeam?: string;
+
+  @IsArray()
+  @ArrayNotEmpty({ message: 'Selecciona al menos un asesor.' })
+  @IsString({ each: true })
+  @MaxLength(MAX_TEXTO_CORTO, { each: true })
+  advisorIds: string[];
+}
+
+class AddExistingMemberDto {
+  @IsNotEmpty() @IsString() @MaxLength(MAX_TEXTO_CORTO) advisorId: string;
+}
+
 @Controller('teams')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
@@ -117,9 +138,31 @@ export class TeamsController {
     return this.teamsService.createTeam(body);
   }
 
+  // Crear team con asesores existentes (no crea logins nuevos).
+  @Post('from-existing')
+  createFromExisting(@Body() body: CreateTeamFromExistingDto) {
+    return this.teamsService.createTeamFromExisting(body);
+  }
+
+  // Asesores que pueden formar/unirse a un team (sin team aún).
+  // Debe ir ANTES de @Get(':id').
+  @Get('unteamed-advisors')
+  unteamedAdvisors() {
+    return this.teamsService.listUnteamedAdvisors();
+  }
+
   @Post(':id/members')
   addMember(@Param('id') id: string, @Body() body: TeamMemberDto) {
     return this.teamsService.addMember(id, body);
+  }
+
+  // Agregar un asesor existente (sin team) a un team ya creado.
+  @Post(':id/existing-members')
+  addExistingMember(
+    @Param('id') id: string,
+    @Body() body: AddExistingMemberDto,
+  ) {
+    return this.teamsService.addExistingMember(id, body.advisorId);
   }
 
   @Get(':id')

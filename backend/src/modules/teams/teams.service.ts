@@ -1,7 +1,14 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { AdvisorsService } from '../advisors/advisors.service';
+
+const META_AMA_POR_INTEGRANTE = 180000;
 
 // Payload de un integrante = mismo shape que el alta de asesor individual.
 type MemberDto = Parameters<AdvisorsService['create']>[0];
@@ -61,6 +68,122 @@ export class TeamsService {
     });
 
     return { teamId, member };
+  }
+
+  /**
+   * Crea un team a partir de asesores QUE YA EXISTEN (p. ej. dos dueños que ya
+   * se dieron de alta como asesores). No crea logins: solo agrupa. Cada asesor
+   * debe existir y no pertenecer aún a ningún team.
+   */
+  async createTeamFromExisting(dto: {
+    nombre: string;
+    clabeInterbancaria?: string;
+    banco?: string;
+    titularCuenta?: string;
+    fechaAltaTeam?: string;
+    advisorIds: string[];
+  }) {
+    const advisorIds = [...new Set(dto.advisorIds ?? [])];
+    if (advisorIds.length < 1) {
+      throw new BadRequestException('Selecciona al menos un asesor.');
+    }
+
+    // DatabaseService serializa cada valor con String(), así que un array no
+    // sirve para ANY(); se arma un IN (@id0, @id1, ...) con un param por id.
+    const idParams: Record<string, string> = {};
+    const placeholders = advisorIds
+      .map((aid, i) => {
+        idParams[`id${i}`] = aid;
+        return `@id${i}`;
+      })
+      .join(', ');
+
+    // Validar que todos existan y ninguno tenga ya un team.
+    const rows = await this.db.query<any>(
+      `SELECT id, name, team_id FROM public.advisors WHERE id IN (${placeholders})`,
+      idParams,
+    );
+    if (rows.length !== advisorIds.length) {
+      throw new NotFoundException('Uno o más asesores no existen.');
+    }
+    const yaEnTeam = rows.filter((r: any) => r.team_id);
+    if (yaEnTeam.length) {
+      throw new ConflictException(
+        `Ya pertenecen a un team: ${yaEnTeam.map((r: any) => r.name).join(', ')}.`,
+      );
+    }
+
+    const teamId = 'TEAM-' + Math.floor(1000 + Math.random() * 9000);
+    const fechaAlta =
+      dto.fechaAltaTeam ?? new Date().toISOString().split('T')[0];
+    const metaAma = advisorIds.length * META_AMA_POR_INTEGRANTE;
+
+    await this.db.query(
+      `INSERT INTO public.teams
+         (id, user_id, nombre, status, meta_ama, clabe_interbancaria, banco, titular_cuenta, fecha_alta_team)
+       VALUES (@id, NULL, @nombre, 'Activo', @metaAma, @clabe, @banco, @titular, @fechaAlta)`,
+      {
+        id: teamId,
+        nombre: dto.nombre,
+        metaAma,
+        clabe: dto.clabeInterbancaria ?? '',
+        banco: dto.banco ?? '',
+        titular: dto.titularCuenta ?? '',
+        fechaAlta,
+      },
+    );
+
+    await this.db.query(
+      `UPDATE public.advisors SET team_id = @teamId, updated_at = NOW()
+       WHERE id IN (${placeholders})`,
+      { teamId, ...idParams },
+    );
+
+    await this.auditService.log({
+      action: 'CREATE_TEAM_FROM_EXISTING',
+      userId: 'system',
+      userEmail: 'system',
+      details: { teamId, nombre: dto.nombre, advisorIds },
+    });
+
+    return { teamId, advisorIds, meta_ama: metaAma };
+  }
+
+  /** Agrega un asesor QUE YA EXISTE (sin team) a un team existente. */
+  async addExistingMember(teamId: string, advisorId: string) {
+    await this.getTeamRow(teamId);
+    const [adv] = await this.db.query<any>(
+      `SELECT id, name, team_id FROM public.advisors WHERE id = @id LIMIT 1`,
+      { id: advisorId },
+    );
+    if (!adv) throw new NotFoundException('El asesor no existe.');
+    if (adv.team_id) {
+      throw new ConflictException(
+        adv.team_id === teamId
+          ? 'Ese asesor ya está en este team.'
+          : 'Ese asesor ya pertenece a otro team.',
+      );
+    }
+    await this.db.query(
+      `UPDATE public.advisors SET team_id = @teamId, updated_at = NOW() WHERE id = @id`,
+      { teamId, id: advisorId },
+    );
+    await this.auditService.log({
+      action: 'ADD_EXISTING_TEAM_MEMBER',
+      userId: 'system',
+      userEmail: 'system',
+      details: { teamId, advisorId },
+    });
+    return { teamId, advisorId };
+  }
+
+  /** Asesores que pueden formar/unirse a un team: los que no tienen team aún. */
+  async listUnteamedAdvisors() {
+    return this.db.query<any>(
+      `SELECT id, name, email, status FROM public.advisors
+       WHERE team_id IS NULL AND status <> 'Baja definitiva'
+       ORDER BY name ASC`,
+    );
   }
 
   /** Agrega un integrante a un team existente. */
