@@ -128,13 +128,31 @@ const GUIDES: Guide[] = [
     summary: 'Registra una operación cerrada; el sistema calcula la comisión automáticamente.',
     roles: ['Super Admin', 'Admin', 'Asesor'],
     accent: '#006c49',
-    keywords: 'cierre operacion venta renta registrar comision automatica',
+    keywords: 'cierre operacion venta renta registrar comision automatica propiedad inventario externa',
     steps: [
       { text: 'Abre “Nuevo Cierre” desde el menú (sección “Operaciones”).', href: '/operations/new', linkLabel: 'Nuevo Cierre' },
-      { text: 'Selecciona la propiedad y el cliente involucrados (o captúralos si el cierre es externo).' },
-      { text: 'Ingresa el precio final de cierre, la fecha y el porcentaje de comisión pactado.' },
+      { text: 'En “¿La propiedad está en el inventario?” elige: “Sí” si es una propiedad captada por nosotros (la seleccionas de la lista), o “No (externa)” si otra inmobiliaria la captó y nosotros solo colocamos al comprador.' },
+      { text: 'Si es del inventario: selecciona la propiedad. Si es externa: captura tipo de cierre, tipo de inmueble, dirección y los “Datos del colocador” (ver la tarjeta específica más abajo).' },
+      { text: 'Ingresa el precio final de cierre, la fecha y el monto de comisión generada.' },
       { text: 'Guarda el cierre. El motor calcula automáticamente la comisión (invitación, mentoría, neto asesor e inmobiliaria).' },
       { text: 'La nueva comisión aparece en el módulo de Comisiones en estado “Calculada”, lista para revisarse y liberarse.', href: '/commissions', linkLabel: 'Ir a Comisiones' },
+    ],
+  },
+  {
+    id: 'cierre-externo',
+    title: 'Registrar un cierre externo (colocación)',
+    icon: ClipboardList,
+    summary: 'Cuando Idea Uno trae al comprador pero la propiedad la captó otra inmobiliaria, se cierra sin dar de alta la propiedad ni su documentación de captación.',
+    roles: ['Super Admin', 'Admin', 'Asesor'],
+    accent: '#006c49',
+    keywords: 'cierre externo colocacion colocador inmobiliaria externa sin inventario sin documentacion captacion propiedad de otro agente referido conjunto porcentaje pactado',
+    steps: [
+      { text: 'En “Nuevo Cierre”, en “¿La propiedad está en el inventario?” marca “No (externa)”.', href: '/operations/new', linkLabel: 'Nuevo Cierre' },
+      { text: 'Captura el tipo de cierre externo (referido, venta en conjunto, etc.), el tipo de inmueble y la dirección.' },
+      { text: 'Llena “Datos del colocador”: la inmobiliaria o agente externo que captó la propiedad es OBLIGATORIA; nombre de contacto, teléfono y correo son opcionales.' },
+      { text: 'El “% de comisión pactada” con el colocador es INFORMATIVO: se guarda como referencia pero NO cambia el cálculo de la comisión (el motor reparte igual que un cierre normal).' },
+      { text: 'No se piden los documentos de captación de la propiedad: los resguarda la inmobiliaria externa. Sí se piden los documentos del cierre y del cliente (KYC/PLD) como siempre.' },
+      { text: 'Guarda. En el detalle de la operación verás una tarjeta “Propiedad externa” con un aviso: “⚠️ Propiedad externa — documentación resguardada por [inmobiliaria]. No aplica documentación de captación.”', href: '/operations', linkLabel: 'Ver Cierres' },
     ],
   },
   {
@@ -349,6 +367,23 @@ const FAQS: Faq[] = [
     a: 'Sí. Primero cada uno debe existir como asesor (alta normal, o “Ligar a una cuenta existente” si es admin). Luego, en “Nuevo Asesor” modo Team, cambia la fuente a “Asesores existentes”, pon la cuenta bancaria del team y selecciónalos de la lista. No se crean logins nuevos: se agrupan y comparten cuenta y dashboard del team. Un asesor no puede estar en dos teams.',
     href: '/advisors/new', linkLabel: 'Ir a Nuevo Asesor',
     keywords: 'dos admins asesores existentes formar team agrupar unir sin duplicar cuenta duenos equipo',
+  },
+  {
+    q: 'La propiedad la captó otra inmobiliaria y nosotros solo trajimos al comprador. ¿Cómo registro ese cierre?',
+    a: 'En “Nuevo Cierre”, en “¿La propiedad está en el inventario?” marca “No (externa)”. Captura tipo de cierre, inmueble y dirección, y en “Datos del colocador” pon la inmobiliaria/agente externo (obligatorio) más contacto opcional. No se piden los documentos de captación de la propiedad — los resguarda la inmobiliaria externa. Sí van los del cierre y del cliente.',
+    href: '/operations/new', linkLabel: 'Ir a Nuevo Cierre',
+    keywords: 'propiedad externa otra inmobiliaria colocacion colocador comprador cierre sin inventario sin documentacion captacion',
+  },
+  {
+    q: 'El “% de comisión pactada” con el colocador externo, ¿cambia el cálculo de la comisión?',
+    a: 'No. Ese porcentaje es solo informativo: se guarda como referencia del acuerdo con la inmobiliaria externa, pero el motor reparte la comisión igual que en cualquier cierre (invitación, mentoría, neto asesor e inmobiliaria). No hay reparto automático hacia el colocador.',
+    keywords: 'porcentaje pactado colocador informativo no cambia calculo comision motor reparto externo',
+  },
+  {
+    q: '¿Por qué un cierre externo no me pide los documentos de la propiedad?',
+    a: 'Porque en una colocación la propiedad no es de nuestro inventario: su documentación legal la resguarda la inmobiliaria que la captó. Por eso el cierre externo avanza sin alta en propiedades. En el detalle de la operación aparece el aviso “⚠️ Propiedad externa — documentación resguardada por [inmobiliaria]. No aplica documentación de captación.”',
+    href: '/operations', linkLabel: 'Ver Cierres',
+    keywords: 'cierre externo no pide documentos propiedad captacion resguarda inmobiliaria externa aviso',
   },
 ];
 
