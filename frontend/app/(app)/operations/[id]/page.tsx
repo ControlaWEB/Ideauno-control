@@ -257,6 +257,33 @@ export default function OperationDetailPage() {
           </div>
         </div>
 
+        {/* Propiedad externa (cierre de colocación) */}
+        {(data.propiedad_en_inventario === false || data.propiedad_en_inventario === 'false') && (
+          <div className="card" style={{ marginBottom: 20 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-primary)', marginBottom: 12 }}>Propiedad externa</div>
+            <div style={{ background: '#fef3c7', border: '1px solid #f0c674', borderRadius: 'var(--radius-md)', padding: '12px 14px', fontSize: 12.5, color: '#7a5b00', marginBottom: 16 }}>
+              ⚠️ Propiedad externa — documentación resguardada por <strong>{data.colocador?.inmobiliaria_externa || 'la inmobiliaria externa'}</strong>. No aplica documentación de captación.
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              <InfoField label="Tipo de cierre externo" value={data.tipo_cierre_externo} />
+              <InfoField label="Tipo de inmueble" value={data.tipo_inmueble_externo} />
+              <InfoField label="Dirección" value={data.direccion_cierre_externo} />
+            </div>
+            {data.colocador && (
+              <>
+                <div style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--color-primary)', margin: '16px 0 10px' }}>Colocador</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+                  <InfoField label="Inmobiliaria / agente" value={data.colocador.inmobiliaria_externa} />
+                  <InfoField label="Contacto" value={data.colocador.nombre_externo} />
+                  <InfoField label="Teléfono" value={data.colocador.telefono_externo} />
+                  <InfoField label="Correo" value={data.colocador.correo_externo} />
+                  <InfoField label="% comisión pactada" value={data.colocador.porcentaje_participacion != null ? `${data.colocador.porcentaje_participacion}%` : '—'} />
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
         {/* Commission Breakdown */}
         <div className="card" style={{ marginBottom: 20 }}>
           <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--color-primary)', marginBottom: 16 }}>Desglose de Comisiones</div>

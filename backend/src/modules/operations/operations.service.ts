@@ -8,6 +8,17 @@ import { AuditService } from '../audit/audit.service';
 import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
+/**
+ * Set cerrado de valores válidos para bridge_operacion_asesores.tipo_participante.
+ * Hoy solo se usa 'Colocador externo' (agente/inmobiliaria que captó la
+ * propiedad en un cierre externo). Dejar aquí los tipos internos a futuro
+ * (co-participación entre asesores, invitador, etc.) para evitar ambigüedad.
+ */
+const TIPO_PARTICIPANTE = {
+  COLOCADOR_EXTERNO: 'Colocador externo',
+  // Futuro (no usar aún): CO_ASESOR: 'Co-asesor', INVITADOR: 'Invitador'
+} as const;
+
 @Injectable()
 export class OperationsService {
   constructor(
@@ -359,7 +370,19 @@ export class OperationsService {
     );
     if (!rows.length)
       throw new NotFoundException(`Operación ${id} no encontrada.`);
-    return rows[0];
+    const op = rows[0];
+
+    // Colocador externo (si la operación es un cierre externo con colocador).
+    const [colocador] = await this.databaseService.query<any>(
+      `SELECT inmobiliaria_externa, nombre_externo, telefono_externo,
+              correo_externo, porcentaje_participacion
+       FROM public.bridge_operacion_asesores
+       WHERE id_operacion = @id AND tipo_participante = @tipo
+       LIMIT 1`,
+      { id, tipo: TIPO_PARTICIPANTE.COLOCADOR_EXTERNO },
+    );
+
+    return { ...op, colocador: colocador ?? null };
   }
 
   async create(dto: Record<string, any>) {
@@ -452,6 +475,40 @@ export class OperationsService {
         `UPDATE public.properties SET status = @status WHERE id = @id`,
         { status: nuevoEstatus, id: propId },
       );
+    }
+
+    // Cierre externo: registrar al colocador (inmobiliaria/agente que captó la
+    // propiedad) en bridge_operacion_asesores. El % pactado es informativo, no
+    // alimenta el motor de comisiones. Si este INSERT falla NO se hace rollback:
+    // la operación y su comisión ya están comprometidas (motor ejecutado,
+    // notificación enviada) y son la fuente de verdad; el colocador es metadato
+    // auxiliar. El fallo se loguea y el detalle mostrará la propiedad externa
+    // sin colocador, señal visible para recapturarlo a mano.
+    if (dto.propiedadEnInventario === false && dto.colocador?.inmobiliaria) {
+      try {
+        const col = dto.colocador;
+        await this.databaseService.query(
+          `INSERT INTO public.bridge_operacion_asesores
+             (id, id_operacion, tipo_participante, nombre_externo, telefono_externo,
+              correo_externo, inmobiliaria_externa, porcentaje_participacion, created_at)
+           VALUES (@bid, @opId, @tipo, @nombre, @tel, @correo, @inmob, @pct, NOW())`,
+          {
+            bid: 'boa-' + Math.random().toString(36).substring(2, 11),
+            opId: id,
+            tipo: TIPO_PARTICIPANTE.COLOCADOR_EXTERNO,
+            nombre: col.nombre || '',
+            tel: col.telefono || '',
+            correo: col.correo || '',
+            inmob: col.inmobiliaria,
+            pct: col.pctPactado ?? null,
+          },
+        );
+      } catch (err) {
+        console.error(
+          `[operations.create] No se guardó el colocador externo de ${id}:`,
+          (err as Error).message,
+        );
+      }
     }
 
     await this.auditService.log({

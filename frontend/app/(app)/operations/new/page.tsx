@@ -42,6 +42,18 @@ const schemaBase = z.object({
       .max(MAX_MONTO, 'El monto excede el máximo permitido.')
       .optional(),
   ),
+  // Colocador externo (solo cierre externo)
+  inmobiliariaColocador:  z.string().optional().or(z.literal('')),
+  nombreColocador:        z.string().optional().or(z.literal('')),
+  telefonoColocador:      z.string().optional().or(z.literal('')),
+  correoColocador:        z.string().optional().or(z.literal('')),
+  pctPactadoColocador:    z.preprocess(
+    (v) => (v === '' || v === null || v === undefined ? undefined : v),
+    z.coerce.number({ message: 'Ingresa un porcentaje válido.' })
+      .min(0, 'No puede ser negativo.')
+      .max(100, 'No puede ser mayor a 100.')
+      .optional(),
+  ),
   docCierreTipo:          z.string().min(1, 'Selecciona el tipo de documento'),
 
   // S2 Económicos
@@ -84,6 +96,11 @@ const schema = schemaBase
   .refine(
     (d) => d.propiedadEnInventario === 'si' || (d.direccionCierreExterno ?? '').trim() !== '',
     { message: 'Indica la dirección del cierre externo.', path: ['direccionCierreExterno'] },
+  )
+  // En cierre externo, la inmobiliaria/agente colocador es obligatoria
+  .refine(
+    (d) => d.propiedadEnInventario === 'si' || (d.inmobiliariaColocador ?? '').trim() !== '',
+    { message: 'Indica la inmobiliaria o agente colocador.', path: ['inmobiliariaColocador'] },
   )
   // La comisión no puede exceder el precio final del cierre
   .refine(
@@ -286,6 +303,18 @@ export default function NewOperationPage() {
         pldExpedienteCompleto:  true,
         solicitaLiberacion:     data.solicitaLiberacion === 'si',
         observaciones:          data.observaciones || '',
+        // Colocador externo: solo en cierre externo con inmobiliaria capturada
+        ...(data.propiedadEnInventario === 'no' && (data.inmobiliariaColocador ?? '').trim()
+          ? {
+              colocador: {
+                inmobiliaria: data.inmobiliariaColocador.trim(),
+                nombre:       data.nombreColocador || '',
+                telefono:     data.telefonoColocador || '',
+                correo:       data.correoColocador || '',
+                pctPactado:   data.pctPactadoColocador,
+              },
+            }
+          : {}),
       } as Record<string, unknown>);
 
       const operationId = res.data?.id;
@@ -460,6 +489,39 @@ export default function NewOperationPage() {
                 <div className="input-group">
                   <label className="input-label">Dirección del inmueble externo</label>
                   <input {...register('direccionCierreExterno')} className="input" placeholder="Dirección completa del inmueble" />
+                  <Err msg={errors.direccionCierreExterno?.message} />
+                </div>
+
+                {/* Datos del colocador (agente/inmobiliaria que captó la propiedad) */}
+                <div style={{ borderTop: '1px solid var(--color-outline-variant)', paddingTop: 14, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--color-primary)' }}>Datos del colocador</div>
+                  <div className="input-group">
+                    <label className="input-label">Inmobiliaria / agente externo *</label>
+                    <input {...register('inmobiliariaColocador')} className="input" placeholder="Nombre de la inmobiliaria o agente que captó" />
+                    <Err msg={errors.inmobiliariaColocador?.message} />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                    <div className="input-group">
+                      <label className="input-label">Nombre de contacto</label>
+                      <input {...register('nombreColocador')} className="input" placeholder="Opcional" />
+                    </div>
+                    <div className="input-group">
+                      <label className="input-label">Teléfono</label>
+                      <input {...register('telefonoColocador')} className="input" placeholder="Opcional" inputMode="tel" />
+                    </div>
+                    <div className="input-group">
+                      <label className="input-label">Correo</label>
+                      <input {...register('correoColocador')} type="email" className="input" placeholder="Opcional" />
+                    </div>
+                    <div className="input-group">
+                      <label className="input-label">% de comisión pactada</label>
+                      <input {...register('pctPactadoColocador')} type="number" min={0} max={100} step="0.01" inputMode="decimal" className="input" placeholder="Informativo" />
+                      <Err msg={errors.pctPactadoColocador?.message} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)' }}>
+                    Esta propiedad no requiere documentación de captación — la resguarda la inmobiliaria externa. El % pactado es informativo, no altera el cálculo de comisión.
+                  </div>
                 </div>
               </div>
             )}

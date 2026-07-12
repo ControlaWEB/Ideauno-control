@@ -25,11 +25,13 @@ import {
   MaxLength,
   Max,
   Min,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import {
   EmptyToUndefined,
   FECHA_ISO,
+  MAX_EMAIL,
   MAX_MONTO,
   MAX_TEXTO_CORTO,
   MAX_TEXTO_LARGO,
@@ -48,6 +50,26 @@ const OPERATION_STATUSES = [
 ];
 
 const NUM_OPTS = { allowNaN: false, allowInfinity: false } as const;
+
+// Datos del colocador externo (agente/inmobiliaria que captó la propiedad).
+// Solo aplica en cierres externos (propiedadEnInventario === false).
+class ColocadorDto {
+  @IsNotEmpty({ message: 'La inmobiliaria/agente externo es requerido.' })
+  @IsString()
+  @MaxLength(MAX_TEXTO_CORTO)
+  inmobiliaria: string;
+
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) nombre?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) telefono?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_EMAIL) correo?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber(NUM_OPTS, { message: 'El % pactado debe ser un número.' })
+  @Min(0, { message: 'El % pactado no puede ser negativo.' })
+  @Max(100, { message: 'El % pactado no puede ser mayor a 100.' })
+  pctPactado?: number;
+}
 
 class CreateOperationDto {
   // S1 Origen
@@ -143,6 +165,12 @@ class CreateOperationDto {
   // S4 PLD
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) pldTipoCliente?: string;
   @IsOptional() @IsBoolean() pldExpedienteCompleto?: boolean;
+
+  // Colocador externo (solo cierres externos)
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ColocadorDto)
+  colocador?: ColocadorDto;
 
   // S6 Pago
   @IsOptional() @IsBoolean() solicitaLiberacion?: boolean;
