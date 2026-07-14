@@ -639,7 +639,7 @@ export default function NewPropertyPage() {
                 { field: 'tienePredial', label: '¿Cuenta con predial?', val: predial, docKey: 'predial' as FileKey, docLabel: 'Último recibo de predial' },
                 { field: 'tieneAgua',   label: '¿Cuenta con recibo de agua?', val: agua, docKey: 'agua' as FileKey, docLabel: 'Último recibo de agua' },
                 { field: 'tieneLuz',    label: '¿Cuenta con recibo de luz?', val: luz, docKey: 'luz' as FileKey, docLabel: 'Último recibo de luz' },
-                { field: 'tieneAvaluo', label: '¿Cuenta con avalúo?', val: avaluo, docKey: 'avaluo' as FileKey, docLabel: 'Avalúo o estimación de valor' },
+                { field: 'tieneAvaluo', label: '¿Cuenta con avalúo o estimación de valor?', val: avaluo, docKey: 'avaluo' as FileKey, docLabel: 'Avalúo o estimación de valor' },
               ] as { field: any; label: string; val: string; docKey: FileKey; docLabel: string }[]
             ).map(item => (
               <div key={item.field} style={{ marginBottom: 16 }}>
