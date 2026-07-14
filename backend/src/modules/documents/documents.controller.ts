@@ -101,7 +101,10 @@ export class DocumentsController {
         validators: [
           new MaxFileSizeValidator({ maxSize: MAX_ESCRITURA_SIZE }),
           new FileTypeValidator({
-            fileType: /^(image\/(jpeg|jpg|png|webp)|application\/pdf)$/,
+            // Fotos del inmueble aceptan ZIP con múltiples archivos; Windows
+            // reporta 'application/x-zip-compressed', otros SO 'application/zip'.
+            fileType:
+              /^(image\/(jpeg|jpg|png|webp)|application\/pdf|application\/zip|application\/x-zip-compressed)$/,
           }),
         ],
       }),
