@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { operationsApi, propertiesApi, advisorsApi, uploadDocuments, templatesApi } from '@/lib/api';
 import { checkDocSize, ensureRequiredDocs, notifyFormErrors } from '@/lib/upload';
 import { useQuery } from '@tanstack/react-query';
-import { useState, useRef, ChangeEvent } from 'react';
+import { useState, useRef, useEffect, ChangeEvent } from 'react';
 import { formatCurrency } from '@/lib/utils';
 import {
   ArrowLeft, CheckCircle, Building2, DollarSign, Users, FileText,
@@ -26,6 +26,12 @@ const zMonto = (msgReq: string) =>
     .positive(msgReq)
     .max(MAX_MONTO, 'El monto excede el máximo permitido.')
     .refine((v) => Math.round(v * 100) === v * 100, 'Máximo 2 decimales.');
+
+// % de comisión pactada: se captura como porcentaje y de ahí se deriva el
+// monto en $ (precio × pct/100), que es lo que el backend sigue esperando.
+const zPct = z.coerce.number({ message: 'Ingresa un porcentaje válido.' })
+  .positive('El % de comisión debe ser mayor a cero.')
+  .max(100, 'El % de comisión no puede ser mayor a 100.');
 
 const schemaBase = z.object({
   // S1 Origen
@@ -61,6 +67,7 @@ const schemaBase = z.object({
   fechaCierre:            z.string().min(1, 'Fecha requerida')
     .refine((v) => !Number.isNaN(Date.parse(v)), 'Fecha inválida.')
     .refine((v) => new Date(v + 'T00:00:00') <= new Date(), 'La fecha de cierre no puede ser futura.'),
+  pctComisionPactada:     zPct,
   montoComisionGenerada:  zMonto('El monto de comisión debe ser mayor a cero.'),
 
   // S3 Asesores
@@ -229,7 +236,7 @@ export default function NewOperationPage() {
   const advisors: any[]   = Array.isArray(advisorsData)   ? advisorsData   : [];
 
   const {
-    register, handleSubmit, control,
+    register, handleSubmit, control, setValue,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
     resolver: zodResolver(schema) as any,
@@ -246,7 +253,17 @@ export default function NewOperationPage() {
   const repComp      = useWatch({ control, name: 'repCompradorTipo' });
   const pldTipo      = useWatch({ control, name: 'pldTipoCliente' });
   const precio       = useWatch({ control, name: 'precioFinalCierre' }) || 0;
+  const pctComision  = useWatch({ control, name: 'pctComisionPactada' }) || 0;
   const comision     = useWatch({ control, name: 'montoComisionGenerada' }) || 0;
+
+  // El monto en $ se deriva de precio × %; el backend sigue recibiendo el
+  // mismo montoComisionGenerada de siempre, solo cambia cómo se captura.
+  useEffect(() => {
+    const monto = precio > 0 && pctComision > 0
+      ? parseFloat(((precio * pctComision) / 100).toFixed(2))
+      : 0;
+    setValue('montoComisionGenerada', monto as never, { shouldValidate: monto > 0 });
+  }, [precio, pctComision, setValue]);
 
   const handleFile = (key: FileKey) => (e: ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -561,8 +578,14 @@ export default function NewOperationPage() {
                 <Err msg={errors.fechaCierre?.message} />
               </div>
               <div className="input-group">
-                <label className="input-label">Monto de comisión generada ($) *</label>
-                <input {...register('montoComisionGenerada')} type="number" min={0} step="0.01" inputMode="decimal" className="input" placeholder="0" />
+                <label className="input-label">% de comisión pactada *</label>
+                <input {...register('pctComisionPactada')} type="number" min={0} max={100} step="0.01" inputMode="decimal" className="input" placeholder="Ej: 5" />
+                <Err msg={errors.pctComisionPactada?.message} />
+                {precio > 0 && pctComision > 0 && (
+                  <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 4 }}>
+                    = {formatCurrency(comision)}
+                  </div>
+                )}
                 <Err msg={errors.montoComisionGenerada?.message} />
               </div>
             </div>
