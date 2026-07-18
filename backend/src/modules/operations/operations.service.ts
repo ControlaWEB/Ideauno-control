@@ -62,15 +62,35 @@ export class OperationsService {
     return rows[0]?.valor_numerico ?? 0;
   }
 
+  /**
+   * Acumulado NETO combinado de todos los integrantes de un team (comisiones de
+   * cierre, no canceladas). Se usa para decidir el AMA compartido del team.
+   */
+  private async getTeamAcumuladoNeto(teamId: string): Promise<number> {
+    const rows = await this.databaseService.query<any>(
+      `SELECT COALESCE(SUM(c.monto_neto_asesor), 0) AS acumulado
+       FROM public.commissions c
+       JOIN public.operations o ON o.id = c.operation_id
+       WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
+         AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = @teamId)`,
+      { teamId },
+    );
+    return Number(rows[0]?.acumulado || 0);
+  }
+
   private async getOrCreateAma(
     advisorId: string,
     fechaAlta: string | null,
+    teamId?: string | null,
   ): Promise<{
     id: string;
     montoAcumulado: number;
     ama_alcanzada: boolean;
     meta_ama: number;
   }> {
+    // Meta AMA = valor VIVO de configuración (fuente única de verdad). Para un
+    // team la meta es COMPARTIDA (el mismo valor, no multiplicado por integrantes)
+    // y el logro se decide con el acumulado combinado de todo el equipo.
     const metaAma = await this.getParam('meta_ama');
     const today = new Date().toISOString().split('T')[0];
 
@@ -79,13 +99,20 @@ export class OperationsService {
       { advisorId },
     );
 
-    if (rows.length > 0)
+    if (rows.length > 0) {
+      const montoAcumulado = Number(rows[0].monto_acumulado);
+      // Logro en vivo contra la meta actual: individual = acumulado propio;
+      // team = acumulado combinado del equipo vs meta compartida.
+      const base = teamId
+        ? await this.getTeamAcumuladoNeto(teamId)
+        : montoAcumulado;
       return {
         id: rows[0].id,
-        montoAcumulado: Number(rows[0].monto_acumulado),
-        ama_alcanzada: rows[0].ama_alcanzada,
-        meta_ama: Number(rows[0].meta_ama),
+        montoAcumulado,
+        ama_alcanzada: metaAma > 0 && base >= metaAma,
+        meta_ama: metaAma,
       };
+    }
 
     // Crear periodo nuevo
     const inicio = fechaAlta ?? today;
@@ -104,10 +131,13 @@ export class OperationsService {
         meta: metaAma,
       },
     );
+    // Fila nueva sin acumulado propio, pero un integrante de team hereda el
+    // logro compartido si el resto del equipo ya cruzó la meta.
+    const baseNueva = teamId ? await this.getTeamAcumuladoNeto(teamId) : 0;
     return {
       id: amaId,
       montoAcumulado: 0,
-      ama_alcanzada: false,
+      ama_alcanzada: metaAma > 0 && baseNueva >= metaAma,
       meta_ama: metaAma,
     };
   }
@@ -151,8 +181,12 @@ export class OperationsService {
       advisor.pasa_por_mentoria === true ||
       advisor.pasa_por_mentoria === 'true';
 
-    // AMA
-    const ama = await this.getOrCreateAma(advisorId, advisor.fecha_alta_asesor);
+    // AMA (team-aware: para integrantes de team el logro es compartido)
+    const ama = await this.getOrCreateAma(
+      advisorId,
+      advisor.fecha_alta_asesor,
+      advisor.team_id,
+    );
     const amaAlcanzada = ama.ama_alcanzada;
 
     // ── Fórmula spec §9.3 ──
@@ -253,17 +287,22 @@ export class OperationsService {
       }
     }
 
-    // Actualizar AMA del asesor (evitar división entre cero si meta_ama = 0)
+    // Actualizar AMA del asesor. monto_acumulado sigue siendo INDIVIDUAL (cada
+    // integrante suma lo suyo); el logro se evalúa contra la base correcta:
+    // individual para asesor solo, combinada del team para integrantes.
     const nuevoAcumulado = parseFloat(
       (ama.montoAcumulado + monto_neto_asesor).toFixed(2),
     );
+    const logroBase = advisor.team_id
+      ? await this.getTeamAcumuladoNeto(advisor.team_id)
+      : nuevoAcumulado;
     const nuevoPct =
       ama.meta_ama > 0
-        ? parseFloat(((nuevoAcumulado / ama.meta_ama) * 100).toFixed(2))
+        ? parseFloat(((logroBase / ama.meta_ama) * 100).toFixed(2))
         : 0;
     // Guardia: sin meta (meta_ama <= 0) nunca se marca como alcanzada,
     // para no dar 100% de comisión por una meta mal configurada.
-    const nuevoAlcanzada = ama.meta_ama > 0 && nuevoAcumulado >= ama.meta_ama;
+    const nuevoAlcanzada = ama.meta_ama > 0 && logroBase >= ama.meta_ama;
     let nuevoEstatus = 'En progreso';
     if (nuevoAlcanzada) nuevoEstatus = 'AMA alcanzada';
     else if (nuevoPct >= 80) nuevoEstatus = '80% alcanzado';

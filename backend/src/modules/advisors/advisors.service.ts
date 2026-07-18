@@ -266,6 +266,13 @@ export class AdvisorsService {
     )
       .toISOString()
       .split('T')[0];
+    // Meta AMA = valor VIVO de configuración (fuente única de verdad), salvo que
+    // el alta traiga una meta explícita. Nada de 180000 hardcodeado.
+    const [metaRow] = await this.databaseService.query<any>(
+      `SELECT valor_numerico FROM public.config_parametros_comision
+       WHERE nombre_parametro = 'meta_ama' AND activo = true LIMIT 1`,
+    );
+    const metaAmaResuelta = dto.metaAma ?? Number(metaRow?.valor_numerico ?? 0);
     await this.databaseService.query(
       `INSERT INTO public.fact_ama_asesor
          (id, id_asesor, fecha_inicio_periodo, fecha_fin_periodo, meta_ama,
@@ -277,7 +284,7 @@ export class AdvisorsService {
         advisorId: id,
         fechaInicio,
         fechaFin,
-        metaAma: dto.metaAma ?? 180000,
+        metaAma: metaAmaResuelta,
       },
     );
 

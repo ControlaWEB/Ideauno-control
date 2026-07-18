@@ -8,8 +8,6 @@ import { DatabaseService } from '../../database/database.service';
 import { AuditService } from '../audit/audit.service';
 import { AdvisorsService } from '../advisors/advisors.service';
 
-const META_AMA_POR_INTEGRANTE = 180000;
-
 // Payload de un integrante = mismo shape que el alta de asesor individual.
 type MemberDto = Parameters<AdvisorsService['create']>[0];
 
@@ -32,6 +30,18 @@ export class TeamsService {
   ) {}
 
   /**
+   * Meta AMA compartida del team = valor VIVO de configuración. Un solo objetivo
+   * para todo el equipo (no se multiplica por número de integrantes).
+   */
+  private async getMetaAmaConfig(): Promise<number> {
+    const rows = await this.db.query<any>(
+      `SELECT valor_numerico FROM public.config_parametros_comision
+       WHERE nombre_parametro = 'meta_ama' AND activo = true LIMIT 1`,
+    );
+    return Number(rows[0]?.valor_numerico ?? 0);
+  }
+
+  /**
    * Crea un team nuevo: fila teams (nombre + cuenta bancaria compartida) +
    * primer integrante (que tiene su PROPIO login, como cualquier asesor).
    */
@@ -39,6 +49,8 @@ export class TeamsService {
     const teamId = 'TEAM-' + Math.floor(1000 + Math.random() * 9000);
     const fechaAlta =
       dto.fechaAltaTeam ?? new Date().toISOString().split('T')[0];
+    // Meta compartida = valor de config (no lo decide el frontend ni se suma).
+    const metaAma = await this.getMetaAmaConfig();
     // user_id queda NULL: el team no tiene login propio, cada integrante sí.
     await this.db.query(
       `INSERT INTO public.teams
@@ -47,7 +59,7 @@ export class TeamsService {
       {
         id: teamId,
         nombre: dto.nombre,
-        metaAma: dto.metaAma ?? 0,
+        metaAma,
         clabe: dto.clabeInterbancaria ?? '',
         banco: dto.banco ?? '',
         titular: dto.titularCuenta ?? '',
@@ -116,7 +128,8 @@ export class TeamsService {
     const teamId = 'TEAM-' + Math.floor(1000 + Math.random() * 9000);
     const fechaAlta =
       dto.fechaAltaTeam ?? new Date().toISOString().split('T')[0];
-    const metaAma = advisorIds.length * META_AMA_POR_INTEGRANTE;
+    // Meta compartida = valor de config (un objetivo para todo el team).
+    const metaAma = await this.getMetaAmaConfig();
 
     await this.db.query(
       `INSERT INTO public.teams

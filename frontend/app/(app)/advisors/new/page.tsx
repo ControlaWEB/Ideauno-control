@@ -320,7 +320,7 @@ export default function NewAdvisorPage() {
           clabeInterbancaria: teamClabe || undefined,
           banco:              teamBanco || undefined,
           titularCuenta:      teamTitular || undefined,
-          metaAma:            total * 180000,       // meta estándar por integrante
+          // Meta AMA la fija el backend desde config (compartida, no × integrantes).
           primerIntegrante:   member,
         });
         setTeamId(res.data?.teamId ?? null);
@@ -611,7 +611,7 @@ export default function NewAdvisorPage() {
                     </div>
                   )}
                   <div style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', marginTop: 8 }}>
-                    Meta AMA del team: <strong>{new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 }).format(Math.max(1, pickedAdvisors.length) * 180000)}</strong> ({Math.max(1, pickedAdvisors.length)} × $180,000).
+                    La meta AMA del team es <strong>compartida</strong>: un solo objetivo para todo el equipo (definido en Configuración), no la suma por integrante.
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
                     <button type="button" className="btn btn-primary" disabled={creatingExisting || pickedAdvisors.length < 1} onClick={submitExistingTeam}>

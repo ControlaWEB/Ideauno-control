@@ -633,7 +633,14 @@ export class DashboardService {
         { scopeId },
       );
       const acumulado = Number(accRows[0]?.acumulado || 0);
-      const meta = Number(team?.meta_ama || 0);
+      // Meta AMA del team = valor VIVO de configuración (compartida entre los
+      // integrantes, un solo objetivo — no la suma por persona).
+      const [metaRow] = await this.databaseService.query<any>(
+        `SELECT valor_numerico FROM public.config_parametros_comision
+         WHERE nombre_parametro = 'meta_ama' AND activo = true LIMIT 1`,
+        {},
+      );
+      const meta = Number(metaRow?.valor_numerico || 0);
       amaData = {
         meta_ama: meta,
         monto_acumulado: acumulado,
@@ -702,6 +709,40 @@ export class DashboardService {
        WHERE id = @id`,
       { id, val: valorNumerico, by: actualizadoPor || 'admin' },
     );
+
+    // Si se editó la meta AMA, propagar a TODO lo que la usa para que el cambio
+    // sea funcional al instante (no un adorno): periodos AMA vigentes de cada
+    // asesor y meta compartida de todos los teams. Se recalculan avance, estatus
+    // y logro contra el acumulado ya registrado.
+    const [param] = await this.databaseService.query<any>(
+      `SELECT nombre_parametro FROM public.config_parametros_comision WHERE id = @id LIMIT 1`,
+      { id },
+    );
+    if (param?.nombre_parametro === 'meta_ama') {
+      await this.databaseService.query(
+        `UPDATE public.fact_ama_asesor SET
+           meta_ama = @val,
+           avance_pct = CASE WHEN @val > 0
+             THEN ROUND((monto_acumulado / @val) * 100, 2) ELSE 0 END,
+           ama_alcanzada = (@val > 0 AND monto_acumulado >= @val),
+           fecha_ama_alcanzada = CASE
+             WHEN @val > 0 AND monto_acumulado >= @val
+               THEN COALESCE(fecha_ama_alcanzada, CURRENT_DATE) ELSE NULL END,
+           estatus_ama = CASE
+             WHEN @val > 0 AND monto_acumulado >= @val THEN 'AMA alcanzada'
+             WHEN @val > 0 AND (monto_acumulado / @val) >= 0.8 THEN '80% alcanzado'
+             ELSE 'En progreso' END,
+           updated_at = now()
+         WHERE estatus_ama <> 'Reiniciado'`,
+        { val: valorNumerico },
+      );
+      // Meta del team es COMPARTIDA = mismo valor de config (no × integrantes).
+      await this.databaseService.query(
+        `UPDATE public.teams SET meta_ama = @val, updated_at = now()`,
+        { val: valorNumerico },
+      );
+    }
+
     return { success: true };
   }
 }
