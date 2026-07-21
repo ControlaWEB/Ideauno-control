@@ -266,6 +266,8 @@ export class DashboardService {
       // Top 5 asesores por comisión total generada (vendedores)
       // Se agregan operaciones y comisiones en subconsultas SEPARADAS para
       // evitar el producto cartesiano (multiplicaba cierres y montos).
+      // Si el asesor pertenece a un team, el cierre cuenta para TODOS los
+      // integrantes (venta compartida, misma regla que AMA / "Mi Dashboard").
       this.databaseService.query<any>(
         `
         SELECT a.id, a.name, a.status,
@@ -273,25 +275,30 @@ export class DashboardService {
                COALESCE(com.comision_neta, 0) as comision_neta,
                COALESCE(com.comision_total, 0) as comision_total
         FROM public.advisors a
-        LEFT JOIN (
-          SELECT advisor_id, COUNT(*) as cierres
-          FROM public.operations
-          WHERE status <> 'Cancelado' ${op.sql}
-          GROUP BY advisor_id
-        ) ops ON ops.advisor_id = a.id
-        LEFT JOIN (
-          SELECT c.advisor_id,
-                 SUM(c.monto_neto_asesor) as comision_neta,
+        LEFT JOIN LATERAL (
+          SELECT COUNT(*) as cierres
+          FROM public.operations o
+          WHERE o.status <> 'Cancelado' ${opO.sql}
+            AND (
+              (a.team_id IS NOT NULL AND o.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+              OR (a.team_id IS NULL AND o.advisor_id = a.id)
+            )
+        ) ops ON true
+        LEFT JOIN LATERAL (
+          SELECT SUM(c.monto_neto_asesor) as comision_neta,
                  SUM(c.monto_comision_total) as comision_total
           FROM public.commissions c
           JOIN public.operations o ON o.id = c.operation_id
           WHERE c.type = 'cierre' AND o.status <> 'Cancelado' ${opO.sql}
-          GROUP BY c.advisor_id
-        ) com ON com.advisor_id = a.id
+            AND (
+              (a.team_id IS NOT NULL AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+              OR (a.team_id IS NULL AND c.advisor_id = a.id)
+            )
+        ) com ON true
         WHERE 1=1 ${advF.sql}
         ORDER BY comision_total DESC NULLS LAST LIMIT 5
       `,
-        { ...op.params, ...opO.params, ...advF.params },
+        { ...opO.params, ...advF.params },
       ),
 
       // Últimos cierres registrados (respeta filtros)
