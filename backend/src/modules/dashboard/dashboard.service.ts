@@ -186,9 +186,10 @@ export class DashboardService {
         // (cierre, no canceladas) dentro del periodo vigente de cada asesor.
         // Si el asesor pertenece a un team, la meta y el acumulado son
         // COMPARTIDOS entre todos los integrantes (misma regla que
-        // computeAdvisorStats / "Mi Dashboard").
+        // computeAdvisorStats / "Mi Dashboard") — DISTINCT para no contar
+        // doble a un team que ya alcanzó su meta compartida.
         `SELECT COUNT(*) as c FROM (
-           SELECT a.id
+           SELECT DISTINCT COALESCE(a.team_id, a.id) as id
            FROM public.advisors a
            LEFT JOIN public.teams t ON t.id = a.team_id
            LEFT JOIN LATERAL (
@@ -263,39 +264,48 @@ export class DashboardService {
       distribucionComisiones,
       propiedadesPorEstatus,
     ] = await Promise.all([
-      // Top 5 asesores por comisión total generada (vendedores)
+      // Top 5 asesores/equipos por comisión total generada (vendedores)
       // Se agregan operaciones y comisiones en subconsultas SEPARADAS para
       // evitar el producto cartesiano (multiplicaba cierres y montos).
       // Si el asesor pertenece a un team, el cierre cuenta para TODOS los
-      // integrantes (venta compartida, misma regla que AMA / "Mi Dashboard").
+      // integrantes (venta compartida, misma regla que AMA / "Mi Dashboard")
+      // y el DISTINCT ON colapsa el team a una sola fila con el nombre del
+      // equipo (evita mostrar el mismo resultado duplicado por integrante).
       this.databaseService.query<any>(
         `
-        SELECT a.id, a.name, a.status,
-               COALESCE(ops.cierres, 0) as cierres,
-               COALESCE(com.comision_neta, 0) as comision_neta,
-               COALESCE(com.comision_total, 0) as comision_total
-        FROM public.advisors a
-        LEFT JOIN LATERAL (
-          SELECT COUNT(*) as cierres
-          FROM public.operations o
-          WHERE o.status <> 'Cancelado' ${opO.sql}
-            AND (
-              (a.team_id IS NOT NULL AND o.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
-              OR (a.team_id IS NULL AND o.advisor_id = a.id)
-            )
-        ) ops ON true
-        LEFT JOIN LATERAL (
-          SELECT SUM(c.monto_neto_asesor) as comision_neta,
-                 SUM(c.monto_comision_total) as comision_total
-          FROM public.commissions c
-          JOIN public.operations o ON o.id = c.operation_id
-          WHERE c.type = 'cierre' AND o.status <> 'Cancelado' ${opO.sql}
-            AND (
-              (a.team_id IS NOT NULL AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
-              OR (a.team_id IS NULL AND c.advisor_id = a.id)
-            )
-        ) com ON true
-        WHERE 1=1 ${advF.sql}
+        SELECT * FROM (
+          SELECT DISTINCT ON (COALESCE(a.team_id, a.id))
+                 COALESCE(a.team_id, a.id) as id,
+                 COALESCE(t.nombre, a.name) as name,
+                 a.status,
+                 COALESCE(ops.cierres, 0) as cierres,
+                 COALESCE(com.comision_neta, 0) as comision_neta,
+                 COALESCE(com.comision_total, 0) as comision_total
+          FROM public.advisors a
+          LEFT JOIN public.teams t ON t.id = a.team_id
+          LEFT JOIN LATERAL (
+            SELECT COUNT(*) as cierres
+            FROM public.operations o
+            WHERE o.status <> 'Cancelado' ${opO.sql}
+              AND (
+                (a.team_id IS NOT NULL AND o.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                OR (a.team_id IS NULL AND o.advisor_id = a.id)
+              )
+          ) ops ON true
+          LEFT JOIN LATERAL (
+            SELECT SUM(c.monto_neto_asesor) as comision_neta,
+                   SUM(c.monto_comision_total) as comision_total
+            FROM public.commissions c
+            JOIN public.operations o ON o.id = c.operation_id
+            WHERE c.type = 'cierre' AND o.status <> 'Cancelado' ${opO.sql}
+              AND (
+                (a.team_id IS NOT NULL AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                OR (a.team_id IS NULL AND c.advisor_id = a.id)
+              )
+          ) com ON true
+          WHERE 1=1 ${advF.sql}
+          ORDER BY COALESCE(a.team_id, a.id), a.id
+        ) x
         ORDER BY comision_total DESC NULLS LAST LIMIT 5
       `,
         { ...opO.params, ...advF.params },
@@ -319,37 +329,45 @@ export class DashboardService {
 
       // Avance AMA — calculado EN VIVO desde comisiones, con dedup al periodo vigente.
       // Si el asesor pertenece a un team, la meta y el acumulado son COMPARTIDOS
-      // entre todos los integrantes (misma regla que computeAdvisorStats / "Mi Dashboard").
+      // entre todos los integrantes (misma regla que computeAdvisorStats / "Mi
+      // Dashboard") y el DISTINCT ON colapsa el team a una sola fila con el
+      // nombre del equipo.
       this.databaseService.query<any>(
         `
-        SELECT a.id, a.name, COALESCE(t.meta_ama, fa.meta_ama) AS meta_ama, fa.estatus_ama,
-               COALESCE(acc.acumulado, 0) AS monto_acumulado,
-               CASE WHEN COALESCE(t.meta_ama, fa.meta_ama) > 0
-                    THEN ROUND((COALESCE(acc.acumulado, 0) / COALESCE(t.meta_ama, fa.meta_ama)) * 100, 2)
-                    ELSE 0 END AS avance_pct,
-               (COALESCE(t.meta_ama, fa.meta_ama) > 0 AND COALESCE(acc.acumulado, 0) >= COALESCE(t.meta_ama, fa.meta_ama)) AS ama_alcanzada
-        FROM public.advisors a
-        LEFT JOIN public.teams t ON t.id = a.team_id
-        LEFT JOIN LATERAL (
-          SELECT * FROM public.fact_ama_asesor f
-          WHERE f.id_asesor = a.id AND f.estatus_ama <> 'Reiniciado'
-          ORDER BY f.created_at DESC LIMIT 1
-        ) fa ON true
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
-          FROM public.commissions c
-          JOIN public.operations o ON o.id = c.operation_id
-          WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
-            AND (
-              (a.team_id IS NOT NULL AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
-              OR (a.team_id IS NULL AND c.advisor_id = a.id)
-            )
-            -- El filtro de periodo solo aplica a asesores individuales; el
-            -- acumulado de team es histórico completo (igual que computeAdvisorStats).
-            AND (a.team_id IS NOT NULL OR fa.fecha_inicio_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre >= fa.fecha_inicio_periodo)
-            AND (a.team_id IS NOT NULL OR fa.fecha_fin_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre <= fa.fecha_fin_periodo)
-        ) acc ON true
-        WHERE a.status IN ('Activo', 'En mentoría') ${advF.sql}
+        SELECT * FROM (
+          SELECT DISTINCT ON (COALESCE(a.team_id, a.id))
+                 COALESCE(a.team_id, a.id) as id,
+                 COALESCE(t.nombre, a.name) as name,
+                 COALESCE(t.meta_ama, fa.meta_ama) AS meta_ama, fa.estatus_ama,
+                 COALESCE(acc.acumulado, 0) AS monto_acumulado,
+                 CASE WHEN COALESCE(t.meta_ama, fa.meta_ama) > 0
+                      THEN ROUND((COALESCE(acc.acumulado, 0) / COALESCE(t.meta_ama, fa.meta_ama)) * 100, 2)
+                      ELSE 0 END AS avance_pct,
+                 (COALESCE(t.meta_ama, fa.meta_ama) > 0 AND COALESCE(acc.acumulado, 0) >= COALESCE(t.meta_ama, fa.meta_ama)) AS ama_alcanzada
+          FROM public.advisors a
+          LEFT JOIN public.teams t ON t.id = a.team_id
+          LEFT JOIN LATERAL (
+            SELECT * FROM public.fact_ama_asesor f
+            WHERE f.id_asesor = a.id AND f.estatus_ama <> 'Reiniciado'
+            ORDER BY f.created_at DESC LIMIT 1
+          ) fa ON true
+          LEFT JOIN LATERAL (
+            SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+            FROM public.commissions c
+            JOIN public.operations o ON o.id = c.operation_id
+            WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
+              AND (
+                (a.team_id IS NOT NULL AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                OR (a.team_id IS NULL AND c.advisor_id = a.id)
+              )
+              -- El filtro de periodo solo aplica a asesores individuales; el
+              -- acumulado de team es histórico completo (igual que computeAdvisorStats).
+              AND (a.team_id IS NOT NULL OR fa.fecha_inicio_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre >= fa.fecha_inicio_periodo)
+              AND (a.team_id IS NOT NULL OR fa.fecha_fin_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre <= fa.fecha_fin_periodo)
+          ) acc ON true
+          WHERE a.status IN ('Activo', 'En mentoría') ${advF.sql}
+          ORDER BY COALESCE(a.team_id, a.id), a.id
+        ) x
         ORDER BY avance_pct DESC NULLS LAST
         LIMIT 10
       `,
@@ -368,18 +386,36 @@ export class DashboardService {
         prop.params,
       ),
 
-      // Top 5 captadores (por propiedades captadas)
+      // Top 5 captadores/equipos (por propiedades captadas). Si el asesor
+      // pertenece a un team, la captación de cualquier integrante cuenta para
+      // el equipo completo (misma regla que computeAdvisorStats / "Mi
+      // Dashboard") y el DISTINCT ON colapsa el team a una sola fila.
       this.databaseService.query<any>(
         `
-        SELECT a.id, a.name,
-               COUNT(p.id) as total_captaciones,
-               COUNT(p.id) FILTER (WHERE p.tipo_operacion = 'Venta') as captaciones_venta,
-               COUNT(p.id) FILTER (WHERE p.tipo_operacion = 'Renta') as captaciones_renta
-        FROM public.advisors a
-        LEFT JOIN public.properties p ON p.advisor_id = a.id ${prop.sql}
-        WHERE 1=1 ${advF.sql}
-        GROUP BY a.id, a.name
-        HAVING COUNT(p.id) > 0
+        SELECT * FROM (
+          SELECT DISTINCT ON (COALESCE(a.team_id, a.id))
+                 COALESCE(a.team_id, a.id) as id,
+                 COALESCE(t.nombre, a.name) as name,
+                 COALESCE(capt.total_captaciones, 0) as total_captaciones,
+                 COALESCE(capt.captaciones_venta, 0) as captaciones_venta,
+                 COALESCE(capt.captaciones_renta, 0) as captaciones_renta
+          FROM public.advisors a
+          LEFT JOIN public.teams t ON t.id = a.team_id
+          LEFT JOIN LATERAL (
+            SELECT COUNT(p.id) as total_captaciones,
+                   COUNT(p.id) FILTER (WHERE p.tipo_operacion = 'Venta') as captaciones_venta,
+                   COUNT(p.id) FILTER (WHERE p.tipo_operacion = 'Renta') as captaciones_renta
+            FROM public.properties p
+            WHERE 1=1 ${prop.sql}
+              AND (
+                (a.team_id IS NOT NULL AND p.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                OR (a.team_id IS NULL AND p.advisor_id = a.id)
+              )
+          ) capt ON true
+          WHERE 1=1 ${advF.sql}
+          ORDER BY COALESCE(a.team_id, a.id), a.id
+        ) x
+        WHERE total_captaciones > 0
         ORDER BY total_captaciones DESC LIMIT 5
       `,
         { ...prop.params, ...advF.params },
@@ -411,47 +447,80 @@ export class DashboardService {
         filters.idAsesor ? { fIdAsesor: filters.idAsesor } : {},
       ),
 
-      // Top 5 asesores en rentas
+      // Top 5 asesores/equipos en rentas. Si el asesor pertenece a un team, la
+      // renta cerrada por cualquier integrante cuenta para el equipo completo
+      // (misma regla que computeAdvisorStats / "Mi Dashboard") y el DISTINCT
+      // ON colapsa el team a una sola fila.
       this.databaseService.query<any>(
         `
-        SELECT a.id, a.name,
-               COUNT(o.id) as rentas_cerradas,
-               COALESCE(SUM(c.monto_neto_asesor), 0) as comision_neta
-        FROM public.advisors a
-        LEFT JOIN public.operations o ON o.advisor_id = a.id AND o.type = 'Renta' ${this.opFilterAliased('o', { ...filters, tipoOperacion: undefined }).sql}
-        LEFT JOIN public.commissions c ON c.advisor_id = a.id AND c.operation_id = o.id AND c.type = 'cierre'
-        WHERE 1=1 ${advF.sql}
-        GROUP BY a.id, a.name
-        HAVING COUNT(o.id) > 0
+        SELECT * FROM (
+          SELECT DISTINCT ON (COALESCE(a.team_id, a.id))
+                 COALESCE(a.team_id, a.id) as id,
+                 COALESCE(t.nombre, a.name) as name,
+                 COALESCE(r.rentas_cerradas, 0) as rentas_cerradas,
+                 COALESCE(r.comision_neta, 0) as comision_neta
+          FROM public.advisors a
+          LEFT JOIN public.teams t ON t.id = a.team_id
+          LEFT JOIN LATERAL (
+            SELECT COUNT(o.id) as rentas_cerradas,
+                   COALESCE(SUM(c.monto_neto_asesor), 0) as comision_neta
+            FROM public.operations o
+            LEFT JOIN public.commissions c ON c.operation_id = o.id AND c.advisor_id = o.advisor_id AND c.type = 'cierre'
+            WHERE o.type = 'Renta' ${this.opFilterAliased('o', { ...filters, tipoOperacion: undefined }).sql}
+              AND (
+                (a.team_id IS NOT NULL AND o.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                OR (a.team_id IS NULL AND o.advisor_id = a.id)
+              )
+          ) r ON true
+          WHERE 1=1 ${advF.sql}
+          ORDER BY COALESCE(a.team_id, a.id), a.id
+        ) x
+        WHERE rentas_cerradas > 0
         ORDER BY rentas_cerradas DESC, comision_neta DESC LIMIT 5
       `,
         { ...this.opFilterAliased('o', { ...filters, tipoOperacion: undefined }).params, ...advF.params },
       ),
 
-      // Top 5 invitadores (por asesores invitados + gratificaciones generadas)
-      // Subconsultas separadas para no multiplicar el conteo de invitados por
-      // el número de comisiones de invitación (producto cartesiano).
+      // Top 5 invitadores/equipos (por asesores invitados + gratificaciones
+      // generadas). Si el asesor pertenece a un team, un invitado o una
+      // gratificación de cualquier integrante cuenta para el equipo completo
+      // (misma regla que computeAdvisorStats / "Mi Dashboard") y el DISTINCT
+      // ON colapsa el team a una sola fila. Subconsultas separadas para no
+      // multiplicar el conteo de invitados por el número de comisiones.
       this.databaseService.query<any>(
         `
-        SELECT a.id, a.name,
-               COALESCE(inv.n, 0) as asesores_invitados,
-               COALESCE(g.grat, 0) as gratificaciones_generadas
-        FROM public.advisors a
-        JOIN (
-          SELECT invite_by_advisor_id as inv_id, COUNT(*) as n
-          FROM public.advisors
-          WHERE invite_by_advisor_id IS NOT NULL
-            AND invite_by_advisor_id <> ''
-            AND invite_by_advisor_id <> 'Directo'
-          GROUP BY invite_by_advisor_id
-        ) inv ON inv.inv_id = a.id
-        LEFT JOIN (
-          SELECT id_asesor_invitador as inv_id, SUM(monto_invitacion) as grat
-          FROM public.commissions
-          WHERE id_asesor_invitador IS NOT NULL AND id_asesor_invitador <> ''
-          GROUP BY id_asesor_invitador
-        ) g ON g.inv_id = a.id
-        WHERE 1=1 ${advF.sql}
+        SELECT * FROM (
+          SELECT DISTINCT ON (COALESCE(a.team_id, a.id))
+                 COALESCE(a.team_id, a.id) as id,
+                 COALESCE(t.nombre, a.name) as name,
+                 COALESCE(inv.n, 0) as asesores_invitados,
+                 COALESCE(g.grat, 0) as gratificaciones_generadas
+          FROM public.advisors a
+          LEFT JOIN public.teams t ON t.id = a.team_id
+          LEFT JOIN LATERAL (
+            SELECT COUNT(*) as n
+            FROM public.advisors inv_a
+            WHERE inv_a.invite_by_advisor_id IS NOT NULL
+              AND inv_a.invite_by_advisor_id <> ''
+              AND inv_a.invite_by_advisor_id <> 'Directo'
+              AND (
+                (a.team_id IS NOT NULL AND inv_a.invite_by_advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                OR (a.team_id IS NULL AND inv_a.invite_by_advisor_id = a.id)
+              )
+          ) inv ON true
+          LEFT JOIN LATERAL (
+            SELECT SUM(c.monto_invitacion) as grat
+            FROM public.commissions c
+            WHERE c.id_asesor_invitador IS NOT NULL AND c.id_asesor_invitador <> ''
+              AND (
+                (a.team_id IS NOT NULL AND c.id_asesor_invitador IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                OR (a.team_id IS NULL AND c.id_asesor_invitador = a.id)
+              )
+          ) g ON true
+          WHERE 1=1 ${advF.sql}
+          ORDER BY COALESCE(a.team_id, a.id), a.id
+        ) x
+        WHERE asesores_invitados > 0
         ORDER BY asesores_invitados DESC, gratificaciones_generadas DESC LIMIT 5
       `,
         advF.params,
