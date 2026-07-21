@@ -10,6 +10,7 @@ import {
   Wallet, CreditCard, CheckCircle2, XCircle, Clock,
 } from 'lucide-react';
 import { notify } from '@/lib/toast';
+import { useRouter } from 'next/navigation';
 
 const formatMXN = (v: number) =>
   new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN' }).format(v);
@@ -27,6 +28,7 @@ type PaidForm = { formaPago: string; montoPagado: string };
 export default function PaymentsPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [paidForms, setPaidForms]   = useState<Record<string, PaidForm>>({});
   const [loadingIds, setLoadingIds] = useState<Record<string, boolean>>({});
@@ -180,14 +182,18 @@ export default function PaymentsPage() {
                     </thead>
                     <tbody>
                       {commissions.map((comm: any) => (
-                        <tr key={comm.id}>
+                        <tr
+                          key={comm.id}
+                          style={{ cursor: comm.operation_id ? 'pointer' : undefined }}
+                          onClick={() => comm.operation_id && router.push(`/operations/${comm.operation_id}`)}
+                        >
                           <td style={{ fontWeight: 600, fontSize: 13 }}>{comm.operation_code || '—'}</td>
                           <td><span className="badge badge-neutral">{comm.operation_type ?? comm.type ?? '—'}</span></td>
                           <td style={{ fontWeight: 700, color: 'var(--color-secondary)' }}>
                             {formatMXN(Number(comm.monto_neto_asesor ?? comm.amount ?? 0))}
                           </td>
                           <td><span className="badge badge-success">{comm.estatus_comision ?? 'Liberada'}</span></td>
-                          <td>
+                          <td onClick={e => e.stopPropagation()}>
                             {comm.estatus_comision === 'Liberada' && (
                               <button
                                 className="btn btn-primary"
@@ -236,7 +242,11 @@ export default function PaymentsPage() {
                       {payments.map((p: any) => {
                         const st = STATUS_STYLE[p.estatus_pago ?? p.estatus ?? p.status] ?? { label: p.estatus_pago ?? p.estatus ?? p.status ?? '—', cls: 'badge-neutral' };
                         return (
-                          <tr key={p.id}>
+                          <tr
+                            key={p.id}
+                            style={{ cursor: p.operation_id ? 'pointer' : undefined }}
+                            onClick={() => p.operation_id && router.push(`/operations/${p.operation_id}`)}
+                          >
                             <td style={{ fontSize: 13 }}>{formatDate(p.fecha_solicitud ?? p.created_at)}</td>
                             <td style={{ fontWeight: 700, color: 'var(--color-secondary)' }}>
                               {formatMXN(Number(p.monto_solicitado ?? p.amount ?? 0))}
@@ -285,14 +295,18 @@ export default function PaymentsPage() {
                     </thead>
                     <tbody>
                       {pendingCommissions.map((comm: any) => (
-                        <tr key={comm.id}>
+                        <tr
+                          key={comm.id}
+                          style={{ cursor: comm.operation_id ? 'pointer' : undefined }}
+                          onClick={() => comm.operation_id && router.push(`/operations/${comm.operation_id}`)}
+                        >
                           <td style={{ fontWeight: 600, fontSize: 13 }}>{comm.advisor_name || '—'}</td>
                           <td style={{ fontSize: 13 }}>{comm.operation_code || '—'}</td>
                           <td><span className="badge badge-neutral">{comm.operation_type ?? comm.type ?? '—'}</span></td>
                           <td style={{ fontWeight: 700, color: 'var(--color-secondary)' }}>
                             {formatMXN(Number(comm.monto_neto_asesor ?? comm.amount ?? 0))}
                           </td>
-                          <td>
+                          <td onClick={e => e.stopPropagation()}>
                             <button
                               className="btn btn-primary"
                               style={{ fontSize: 12, padding: '5px 12px' }}
@@ -346,7 +360,10 @@ export default function PaymentsPage() {
                       const paidFormOpen = !!paidForms[p.id];
                       return (
                         <Fragment key={p.id}>
-                          <tr>
+                          <tr
+                            style={{ cursor: p.operation_id ? 'pointer' : undefined }}
+                            onClick={() => p.operation_id && router.push(`/operations/${p.operation_id}`)}
+                          >
                             <td style={{ fontSize: 13, fontWeight: 600 }}>{p.advisor_name ?? '—'}</td>
                             <td style={{ fontSize: 13 }}>{formatDate(p.fecha_solicitud ?? p.created_at)}</td>
                             <td style={{ fontWeight: 700, color: 'var(--color-secondary)' }}>
@@ -357,7 +374,7 @@ export default function PaymentsPage() {
                             </td>
                             <td style={{ fontSize: 13 }}>{p.forma_pago ?? '—'}</td>
                             <td><span className={`badge ${st.cls}`}>{st.label}</span></td>
-                            <td>
+                            <td onClick={e => e.stopPropagation()}>
                               {isSolicitado && (
                                 <div style={{ display: 'flex', gap: 6 }}>
                                   <button

@@ -63,12 +63,15 @@ export class OperationsService {
   }
 
   /**
-   * Acumulado NETO combinado de todos los integrantes de un team (comisiones de
-   * cierre, no canceladas). Se usa para decidir el AMA compartido del team.
+   * Acumulado de INGRESO A LA INMOBILIARIA combinado de todos los integrantes
+   * de un team (comisiones de cierre, no canceladas). Se usa para decidir el
+   * AMA compartido del team. Confirmado con Idea Uno: el AMA se mide contra el
+   * ingreso a la inmobiliaria (monto_inmobiliaria), NO contra la comisión neta
+   * del asesor.
    */
   private async getTeamAcumuladoNeto(teamId: string): Promise<number> {
     const rows = await this.databaseService.query<any>(
-      `SELECT COALESCE(SUM(c.monto_neto_asesor), 0) AS acumulado
+      `SELECT COALESCE(SUM(c.monto_inmobiliaria), 0) AS acumulado
        FROM public.commissions c
        JOIN public.operations o ON o.id = c.operation_id
        WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
@@ -294,8 +297,10 @@ export class OperationsService {
     // Actualizar AMA del asesor. monto_acumulado sigue siendo INDIVIDUAL (cada
     // integrante suma lo suyo); el logro se evalúa contra la base correcta:
     // individual para asesor solo, combinada del team para integrantes.
+    // Confirmado con Idea Uno: el AMA se mide contra el INGRESO A LA
+    // INMOBILIARIA (monto_inmobiliaria), no contra la comisión neta del asesor.
     const nuevoAcumulado = parseFloat(
-      (ama.montoAcumulado + monto_neto_asesor).toFixed(2),
+      (ama.montoAcumulado + monto_inmobiliaria).toFixed(2),
     );
     const logroBase = advisor.team_id
       ? await this.getTeamAcumuladoNeto(advisor.team_id)
@@ -821,14 +826,16 @@ export class OperationsService {
       { id },
     );
 
-    // Revert AMA: subtract commission amount from monto_acumulado
+    // Revert AMA: subtract commission amount from monto_acumulado.
+    // Confirmado con Idea Uno: el AMA se mide contra el INGRESO A LA
+    // INMOBILIARIA (monto_inmobiliaria), no contra la comisión neta del asesor.
     const commRows = await this.databaseService.query<any>(
-      `SELECT advisor_id, monto_neto_asesor FROM public.commissions WHERE operation_id = @id AND type = 'cierre' LIMIT 1`,
+      `SELECT advisor_id, monto_inmobiliaria FROM public.commissions WHERE operation_id = @id AND type = 'cierre' LIMIT 1`,
       { id },
     );
     if (commRows.length) {
-      const { advisor_id, monto_neto_asesor } = commRows[0];
-      if (monto_neto_asesor && Number(monto_neto_asesor) > 0) {
+      const { advisor_id, monto_inmobiliaria } = commRows[0];
+      if (monto_inmobiliaria && Number(monto_inmobiliaria) > 0) {
         await this.databaseService.query(
           `UPDATE public.fact_ama_asesor
            SET monto_acumulado = GREATEST(0, monto_acumulado - @monto),
@@ -836,7 +843,7 @@ export class OperationsService {
                ama_alcanzada = CASE WHEN (monto_acumulado - @monto) >= meta_ama THEN true ELSE false END,
                updated_at = now()
            WHERE id_asesor = @advisorId AND estatus_ama = 'En progreso'`,
-          { advisorId: advisor_id, monto: Number(monto_neto_asesor) },
+          { advisorId: advisor_id, monto: Number(monto_inmobiliaria) },
         );
       }
     }

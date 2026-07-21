@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { propertiesApi, uploadDocuments, documentsApi } from '@/lib/api';
+import { useQuery } from '@tanstack/react-query';
+import { propertiesApi, advisorsApi, uploadDocuments, documentsApi } from '@/lib/api';
 import { checkDocSize, ensureRequiredDocs, notifyFormErrors } from '@/lib/upload';
 import { useAuthStore } from '@/store/auth.store';
 import { useState, useRef, useEffect, ChangeEvent } from 'react';
@@ -105,6 +106,7 @@ const schema = z.object({
   amenidades:         z.string().optional().or(z.literal('')),
 
   // S7 Captación/autorización
+  advisorId:                 z.string().optional().or(z.literal('')),
   autorizacionPromocion:     z.enum(['si', 'no']),
   tipoAutorizacion:          z.string().optional().or(z.literal('')),
   contratoComisionFirmado:   z.enum(['si', 'no']),
@@ -220,6 +222,17 @@ export default function NewPropertyPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const hasAccess = useHasAccess(ALLOWED_ROLES);
+  // Un Admin/Super Admin sin perfil de asesor propio debe elegir explícitamente
+  // qué asesor se lleva el crédito de la captación (antes se guardaba
+  // silenciosamente el UUID de su cuenta de usuario, que no existe en
+  // public.advisors — la propiedad quedaba huérfana y no aparecía en rankings).
+  const needsAdvisorPicker = !user?.advisorId;
+  const { data: advisorsData } = useQuery({
+    queryKey: ['advisors-for-captacion'],
+    queryFn: () => advisorsApi.getAll().then(r => r.data?.data ?? r.data ?? []),
+    enabled: needsAdvisorPicker,
+  });
+  const advisorsList: any[] = Array.isArray(advisorsData) ? advisorsData : [];
   const [success, setSuccess]   = useState(false);
   const [uploading, setUploading] = useState(false);
   const [files, setFiles]       = useState<Partial<Record<FileKey, File>>>({});
@@ -322,6 +335,11 @@ export default function NewPropertyPage() {
     }
     if (!ensureRequiredDocs(files as Record<string, File | undefined>, requiredDocs)) return;
 
+    if (needsAdvisorPicker && !data.advisorId) {
+      notify.error('Selecciona el asesor que se lleva el crédito de esta captación.');
+      return;
+    }
+
     // Validación de copropietarios: exige cantidad + una INE por cada uno
     if (data.tieneCopropietarios === 'si') {
       if (numCoowners < 1) {
@@ -349,7 +367,7 @@ export default function NewPropertyPage() {
     try {
       const res = await propertiesApi.create({
         ...data,
-        advisorId: user?.advisorId ?? user?.id,
+        advisorId: user?.advisorId ?? data.advisorId,
         tieneCopropietarios: data.tieneCopropietarios === 'si',
         copropietarios: JSON.stringify(copropietarios),
         provieneHerencia: data.provieneHerencia === 'si',
@@ -899,6 +917,18 @@ export default function NewPropertyPage() {
           {/* ─── S7: Asesor y Autorización ─── */}
           <div className="card">
             <SectionHeader index={7} icon={<Building2 size={14} />} title="Asesor y Autorización de Captación" subtitle="Contrato de comisión mercantil y condiciones de promoción" />
+
+            {needsAdvisorPicker && (
+              <div className="input-group" style={{ marginBottom: 18 }}>
+                <label className="input-label">Asesor que capta la propiedad *</label>
+                <select {...register('advisorId')} className="select">
+                  <option value="">— Seleccionar asesor —</option>
+                  {advisorsList.map((a: any) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
               <div className="input-group">

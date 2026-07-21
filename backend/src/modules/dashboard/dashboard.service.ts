@@ -182,8 +182,9 @@ export class DashboardService {
         filters.idAsesor ? { fIdAsesor: filters.idAsesor } : {},
       ),
       this.databaseService.query<any>(
-        // AMA alcanzada calculada EN VIVO: acumulado real de comisiones netas
-        // (cierre, no canceladas) dentro del periodo vigente de cada asesor.
+        // AMA alcanzada calculada EN VIVO: acumulado real de INGRESO A LA
+        // INMOBILIARIA (monto_inmobiliaria, no la comisión neta del asesor —
+        // confirmado con Idea Uno) dentro del periodo vigente de cada asesor.
         // Si el asesor pertenece a un team, la meta y el acumulado son
         // COMPARTIDOS entre todos los integrantes (misma regla que
         // computeAdvisorStats / "Mi Dashboard") — DISTINCT para no contar
@@ -198,7 +199,7 @@ export class DashboardService {
              ORDER BY f.created_at DESC LIMIT 1
            ) fa ON true
            LEFT JOIN LATERAL (
-             SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+             SELECT COALESCE(SUM(c.monto_inmobiliaria), 0) as acumulado
              FROM public.commissions c
              JOIN public.operations o ON o.id = c.operation_id
              WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
@@ -327,11 +328,12 @@ export class DashboardService {
         { ...opO.params, ...(filters.idAsesor ? { fIdAsesor: filters.idAsesor } : {}) },
       ),
 
-      // Avance AMA — calculado EN VIVO desde comisiones, con dedup al periodo vigente.
-      // Si el asesor pertenece a un team, la meta y el acumulado son COMPARTIDOS
-      // entre todos los integrantes (misma regla que computeAdvisorStats / "Mi
-      // Dashboard") y el DISTINCT ON colapsa el team a una sola fila con el
-      // nombre del equipo.
+      // Avance AMA — calculado EN VIVO desde el INGRESO A LA INMOBILIARIA
+      // (monto_inmobiliaria, no la comisión neta del asesor — confirmado con
+      // Idea Uno), con dedup al periodo vigente. Si el asesor pertenece a un
+      // team, la meta y el acumulado son COMPARTIDOS entre todos los
+      // integrantes (misma regla que computeAdvisorStats / "Mi Dashboard") y
+      // el DISTINCT ON colapsa el team a una sola fila con el nombre del equipo.
       this.databaseService.query<any>(
         `
         SELECT * FROM (
@@ -352,7 +354,7 @@ export class DashboardService {
             ORDER BY f.created_at DESC LIMIT 1
           ) fa ON true
           LEFT JOIN LATERAL (
-            SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+            SELECT COALESCE(SUM(c.monto_inmobiliaria), 0) as acumulado
             FROM public.commissions c
             JOIN public.operations o ON o.id = c.operation_id
             WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
@@ -727,10 +729,12 @@ export class DashboardService {
     ]);
 
     // ── AMA: por team (meta del team + acumulado agregado) o por asesor (periodo vigente) ──
+    // Confirmado con Idea Uno: el AMA se mide contra el INGRESO A LA
+    // INMOBILIARIA (monto_inmobiliaria), no contra la comisión neta del asesor.
     let amaData: any = null;
     if (teamId) {
       const accRows = await this.databaseService.query<any>(
-        `SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+        `SELECT COALESCE(SUM(c.monto_inmobiliaria), 0) as acumulado
          FROM public.commissions c
          JOIN public.operations o ON o.id = c.operation_id
          WHERE ${scope('c.advisor_id')} AND c.type = 'cierre' AND o.status <> 'Cancelado'`,
@@ -764,7 +768,7 @@ export class DashboardService {
                 (fa.meta_ama > 0 AND COALESCE(acc.acumulado, 0) >= fa.meta_ama) AS ama_alcanzada
          FROM public.fact_ama_asesor fa
          LEFT JOIN LATERAL (
-           SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+           SELECT COALESCE(SUM(c.monto_inmobiliaria), 0) as acumulado
            FROM public.commissions c
            JOIN public.operations o ON o.id = c.operation_id
            WHERE c.advisor_id = @advisorId AND c.type = 'cierre' AND o.status <> 'Cancelado'

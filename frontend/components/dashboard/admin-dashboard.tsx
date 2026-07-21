@@ -175,7 +175,7 @@ export function AdminDashboard() {
           <div className="card-header">
             <div>
               <div className="card-title">Avance AMA por asesor</div>
-              <div className="card-subtitle">Meta anual de comisiones netas — verde: meta alcanzada</div>
+              <div className="card-subtitle">Meta anual de ingreso a la inmobiliaria — verde: meta alcanzada</div>
             </div>
           </div>
           {loading ? <div className="skeleton" style={{ height: 300, borderRadius: 'var(--radius-md)' }} /> : <AvanceAmaChart data={amaAsesores} />}

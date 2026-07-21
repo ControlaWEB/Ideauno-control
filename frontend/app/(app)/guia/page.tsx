@@ -233,7 +233,7 @@ const GUIDES: Guide[] = [
       { text: 'Porcentaje asesor normal (%): parte del remanente que recibe el asesor ANTES de alcanzar su meta AMA (el resto es de la inmobiliaria). Al alcanzar el AMA el asesor pasa automáticamente al 100%. Subirlo = el asesor gana más y la inmobiliaria menos por cierre.' },
       { text: 'Porcentaje mentoría (%): deducción que se le quita a la comisión neta del asesor en periodo de mentoría y se le paga a su mentor. Afecta el neto del asesor mentoreado y el pago al mentor.' },
       { text: 'Mínimo exento mentoría renta ($): si la comisión de una RENTA es menor a este monto, no se aplica la deducción de mentoría. Sirve para no castigar rentas chicas. Solo afecta operaciones de renta.' },
-      { text: 'Meta AMA ($): monto de comisiones netas que el asesor debe acumular en su año operativo para “alcanzar AMA”. Al alcanzarla pasa de porcentaje normal a 100%. También define el % de avance que se ve en el Dashboard, Mi Dashboard y la ficha del asesor.' },
+      { text: 'Meta AMA ($): monto de ingreso a la inmobiliaria (monto_inmobiliaria de cada cierre, no la comisión neta del asesor) que el asesor debe acumular en su año operativo para “alcanzar AMA”. Al alcanzarla pasa de porcentaje normal a 100%. También define el % de avance que se ve en el Dashboard, Mi Dashboard y la ficha del asesor.' },
       { text: 'duracion_anio_operativo_meses: cuántos meses dura el año operativo (normalmente 12). Define la ventana del periodo AMA de cada asesor.' },
       { text: 'ventas_para_salir_mentoria: número de cierres que un asesor necesita para salir del periodo de mentoría.' },
     ],
@@ -308,7 +308,7 @@ const FAQS: Faq[] = [
   },
   {
     q: '¿Qué es el AMA?',
-    a: 'Es la meta anual de comisiones netas de cada asesor (por defecto $180,000 MXN). Mientras no la alcanza, el asesor recibe el 80% de su comisión; una vez alcanzada, recibe el 100%. El avance se ve en el Dashboard y en la ficha del asesor.',
+    a: 'Es la meta anual de ingreso a la inmobiliaria (no de comisión neta del asesor) que genera cada asesor con sus cierres. Mientras no la alcanza, el asesor recibe el 80% de su comisión; una vez alcanzada, recibe el 100%. El avance se ve en el Dashboard y en la ficha del asesor.',
     href: '/advisors', linkLabel: 'Ver Asesores',
     keywords: 'ama meta anual 180000 avance asesor 80 100',
   },

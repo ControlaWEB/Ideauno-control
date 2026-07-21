@@ -8,6 +8,7 @@ import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
 import { DollarSign, Lock, Unlock, Search, TrendingUp, Calculator } from 'lucide-react';
 import { notify } from '@/lib/toast';
+import { useRouter } from 'next/navigation';
 
 const STATUS_MAP: Record<string, { label: string; class: string }> = {
   Calculada:              { label: 'Calculada',        class: 'badge-warning' },
@@ -30,6 +31,7 @@ const ACTION_ROLES = ['Super Admin', 'Admin', 'Jurídico'];
 export default function CommissionsPage() {
   const { user } = useAuthStore();
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [search, setSearch]           = useState('');
   const [filterStatus, setFilterStatus] = useState('');
@@ -225,7 +227,11 @@ export default function CommissionsPage() {
                   const isBlockingThis = blockingId === c.id;
 
                   return (
-                    <tr key={c.id}>
+                    <tr
+                      key={c.id}
+                      style={{ cursor: c.operation_id ? 'pointer' : undefined }}
+                      onClick={() => c.operation_id && router.push(`/operations/${c.operation_id}`)}
+                    >
                       <td style={{ fontSize: 12.5 }}>
                         <div style={{ fontWeight: 600 }}>{c.operation_code || '—'}</div>
                         <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)' }}>{c.operation_type}</div>
@@ -244,7 +250,7 @@ export default function CommissionsPage() {
                       <td><span className={`badge ${s.class}`}>{s.label}</span></td>
 
                       {canAct && (
-                        <td style={{ minWidth: 160 }}>
+                        <td style={{ minWidth: 160 }} onClick={e => e.stopPropagation()}>
                           {c.estatus_comision === 'Bloqueada' ? (
                             <button
                               className="btn btn-sm"

@@ -103,7 +103,8 @@ export class AdvisorsService {
         { advId: adv.id },
       ),
       this.databaseService.query<any>(
-        // AMA calculada EN VIVO (periodo vigente + acumulado real de comisiones)
+        // AMA calculada EN VIVO (periodo vigente + acumulado real del INGRESO A
+        // LA INMOBILIARIA — confirmado con Idea Uno, no la comisión neta del asesor)
         `SELECT fa.meta_ama, fa.estatus_ama, fa.fecha_inicio_periodo, fa.fecha_fin_periodo,
                 COALESCE(acc.acumulado, 0) AS monto_acumulado,
                 CASE WHEN fa.meta_ama > 0
@@ -112,7 +113,7 @@ export class AdvisorsService {
                 (fa.meta_ama > 0 AND COALESCE(acc.acumulado, 0) >= fa.meta_ama) AS ama_alcanzada
          FROM public.fact_ama_asesor fa
          LEFT JOIN LATERAL (
-           SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
+           SELECT COALESCE(SUM(c.monto_inmobiliaria), 0) as acumulado
            FROM public.commissions c
            JOIN public.operations o ON o.id = c.operation_id
            WHERE c.advisor_id = @advId AND c.type = 'cierre' AND o.status <> 'Cancelado'

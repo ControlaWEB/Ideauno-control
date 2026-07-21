@@ -237,7 +237,7 @@ export function AdvisorDashboard({ advisorId, advisorName, viewingAsAdmin, heade
             <div className="card-header">
               <div>
                 <div className="card-title">Meta AMA Anual</div>
-                <div className="card-subtitle">Acumulado de comisiones netas</div>
+                <div className="card-subtitle">Acumulado de ingreso a la inmobiliaria</div>
               </div>
               {amaAlcanzada && (
                 <span className="badge" style={{ background: 'var(--color-secondary)', color: 'var(--color-primary)', fontWeight: 700 }}>

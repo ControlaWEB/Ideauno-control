@@ -14,7 +14,7 @@ const PARAM_META: Record<string, { label: string; desc: string; isPercent?: bool
   porcentaje_invitacion:          { label: 'Porcentaje invitación (%)', desc: 'Parte de la comisión que va al asesor invitador.', isPercent: true },
   porcentaje_asesor_normal:       { label: 'Porcentaje asesor normal (%)', desc: 'Parte del remanente para el asesor antes de alcanzar AMA.', isPercent: true },
   porcentaje_asesor_ama:          { label: 'Porcentaje asesor AMA (%)', desc: 'Parte del remanente para el asesor al alcanzar meta AMA (normalmente 100).', isPercent: true },
-  meta_ama:                       { label: 'Meta AMA ($)', desc: 'Monto de comisiones netas que el asesor debe acumular para alcanzar AMA.', isCurrency: true },
+  meta_ama:                       { label: 'Meta AMA ($)', desc: 'Monto de ingreso a la inmobiliaria (no comisión neta del asesor) que debe acumular para alcanzar AMA.', isCurrency: true },
   porcentaje_mentoria:            { label: 'Porcentaje mentoría (%)', desc: 'Deducción de la comisión neta del asesor en periodo de mentoría.', isPercent: true },
   minimo_exento_mentoria_renta:   { label: 'Mínimo exento mentoría renta ($)', desc: 'Si comisión de renta < este valor, no aplica deducción por mentoría.', isCurrency: true },
   umbral_pld:                     { label: 'Umbral PLD ($)', desc: 'Monto a partir del cual la operación requiere expediente KYC completo.', isCurrency: true },
