@@ -50,6 +50,19 @@ export default function PaymentsPage() {
     refetchOnWindowFocus: true,
   });
 
+  // Admin/Super Admin: comisiones liberadas de TODOS los asesores que aún no
+  // tienen una solicitud de pago activa/completada — para poder solicitarlas
+  // sin depender de que el asesor entre a su cuenta.
+  const { data: pendingCommissions = [], isLoading: loadingPending } = useQuery<any[]>({
+    queryKey: ['commissions-pending-request'],
+    queryFn: () =>
+      api.get('/operations/commissions', {
+        params: { status: 'Liberada', sinSolicitud: 'true' },
+      }).then(r => r.data?.data ?? []),
+    enabled: isAdmin,
+    refetchOnWindowFocus: true,
+  });
+
   // Toast flotante global. Los errores de API los muestra el interceptor de axios.
   const toast = (msg: string, isError = false) =>
     isError ? notify.error(msg) : notify.success(msg);
@@ -63,6 +76,7 @@ export default function PaymentsPage() {
       await api.post('/payments/request', { commissionId: commId, advisorId });
       await queryClient.invalidateQueries({ queryKey: ['payments'] });
       await queryClient.invalidateQueries({ queryKey: ['commissions'] });
+      await queryClient.invalidateQueries({ queryKey: ['commissions-pending-request'] });
       toast('Solicitud de pago enviada correctamente');
     } catch { /* toast global */ } finally {
       setLoader(commId, false);
@@ -242,10 +256,64 @@ export default function PaymentsPage() {
 
         {/* ─── ADMIN VIEW ─── */}
         {isAdmin && (
-          <div className="card">
-            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 14 }}>
-              Solicitudes de Pago
+          <>
+            {/* Comisiones liberadas de todos los asesores, aún sin solicitud */}
+            <div className="card" style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 14 }}>
+                Comisiones liberadas pendientes de solicitud
+              </div>
+              {loadingPending ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {[1, 2].map(i => <div key={i} className="skeleton" style={{ height: 44, borderRadius: 'var(--radius-md)' }} />)}
+                </div>
+              ) : pendingCommissions.length === 0 ? (
+                <div className="empty-state" style={{ padding: '24px 0' }}>
+                  <Wallet size={28} />
+                  <p>No hay comisiones liberadas pendientes de solicitud</p>
+                </div>
+              ) : (
+                <div className="table-container">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Asesor</th>
+                        <th>Operación</th>
+                        <th>Tipo</th>
+                        <th>Monto Neto</th>
+                        <th>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pendingCommissions.map((comm: any) => (
+                        <tr key={comm.id}>
+                          <td style={{ fontWeight: 600, fontSize: 13 }}>{comm.advisor_name || '—'}</td>
+                          <td style={{ fontSize: 13 }}>{comm.operation_code || '—'}</td>
+                          <td><span className="badge badge-neutral">{comm.operation_type ?? comm.type ?? '—'}</span></td>
+                          <td style={{ fontWeight: 700, color: 'var(--color-secondary)' }}>
+                            {formatMXN(Number(comm.monto_neto_asesor ?? comm.amount ?? 0))}
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-primary"
+                              style={{ fontSize: 12, padding: '5px 12px' }}
+                              disabled={!!loadingIds[comm.id]}
+                              onClick={() => requestPayment(comm.id, comm.advisor_id)}
+                            >
+                              {loadingIds[comm.id] ? 'Enviando…' : 'Solicitar Pago'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
+
+            <div className="card">
+              <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-primary)', marginBottom: 14 }}>
+                Solicitudes de Pago
+              </div>
             {loadingPayments ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {[1, 2, 3].map(i => <div key={i} className="skeleton" style={{ height: 54, borderRadius: 'var(--radius-md)' }} />)}
@@ -386,6 +454,7 @@ export default function PaymentsPage() {
               </div>
             )}
           </div>
+          </>
         )}
 
         {!isAsesor && !isAdmin && (

@@ -586,6 +586,7 @@ export class OperationsService {
     status?: string;
     type?: string;
     operationId?: string;
+    sinSolicitud?: boolean;
     page?: number;
     limit?: number;
   }) {
@@ -614,6 +615,11 @@ export class OperationsService {
     if (filters.operationId) {
       clauses.push('c.operation_id = @operationId');
       params.operationId = filters.operationId;
+    }
+    if (filters.sinSolicitud) {
+      clauses.push(
+        `NOT EXISTS (SELECT 1 FROM public.fact_pagos p WHERE p.id_comision = c.id AND p.estatus_pago IN ('Solicitado', 'Autorizado', 'Pagado'))`,
+      );
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 

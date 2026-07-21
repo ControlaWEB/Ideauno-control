@@ -204,6 +204,9 @@ class FindCommissionsQueryDto extends PaginationQueryDto {
   @EmptyToUndefined()
   @IsIn(['cierre', 'invitacion', 'mentoria'])
   type?: string;
+  // 'true' = solo comisiones sin una solicitud de pago activa/completada aún
+  // (para la vista de Admin: "liberadas pendientes de solicitud").
+  @IsOptional() @IsIn(['true', 'false']) sinSolicitud?: string;
 }
 
 class CancelOperationDto {
@@ -258,6 +261,7 @@ export class OperationsController {
       status: query.status,
       type: query.type,
       operationId: query.operationId,
+      sinSolicitud: query.sinSolicitud === 'true',
       page: query.page ?? 1,
       limit: query.limit ?? 20,
     });
