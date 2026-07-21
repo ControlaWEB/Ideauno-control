@@ -61,6 +61,10 @@ export class AdvisorsService {
   }
 
   async findOne(id: string) {
+    // El AMA se reinicia cada 365 días: antes de leer el periodo vigente,
+    // cierra cualquier periodo vencido y abre el que corresponde a hoy.
+    await this.databaseService.query(`SELECT public.rollover_ama_periods()`, {});
+
     const sql = `SELECT * FROM public.advisors WHERE id = @id LIMIT 1`;
     const rows = await this.databaseService.query<any>(sql, { id });
     if (rows.length === 0) {

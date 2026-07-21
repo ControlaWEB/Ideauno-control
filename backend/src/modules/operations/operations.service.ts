@@ -94,6 +94,10 @@ export class OperationsService {
     const metaAma = await this.getParam('meta_ama');
     const today = new Date().toISOString().split('T')[0];
 
+    // El AMA se reinicia cada 365 días: antes de leer/usar el periodo vigente,
+    // cierra cualquier periodo vencido y abre el que corresponde a hoy.
+    await this.databaseService.query(`SELECT public.rollover_ama_periods()`, {});
+
     const rows = await this.databaseService.query<any>(
       `SELECT * FROM public.fact_ama_asesor WHERE id_asesor = @advisorId AND estatus_ama != 'Reiniciado' LIMIT 1`,
       { advisorId },

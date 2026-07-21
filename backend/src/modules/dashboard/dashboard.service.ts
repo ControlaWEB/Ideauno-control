@@ -94,7 +94,14 @@ export class DashboardService {
     return { sql: '', params: {} };
   }
 
+  // El AMA se reinicia cada 365 días: antes de cualquier lectura, cierra
+  // periodos vencidos y abre el que corresponde a hoy (idempotente).
+  private async ensureAmaPeriodsCurrent() {
+    await this.databaseService.query(`SELECT public.rollover_ama_periods()`, {});
+  }
+
   async getKpis(filters: DashboardFilters = {}) {
+    await this.ensureAmaPeriodsCurrent();
     const prop = this.propFilter(filters);
     const op = this.opFilter(filters);
     const opEstatus = this.opFilter(filters, { estatus: true });
@@ -177,9 +184,13 @@ export class DashboardService {
       this.databaseService.query<any>(
         // AMA alcanzada calculada EN VIVO: acumulado real de comisiones netas
         // (cierre, no canceladas) dentro del periodo vigente de cada asesor.
+        // Si el asesor pertenece a un team, la meta y el acumulado son
+        // COMPARTIDOS entre todos los integrantes (misma regla que
+        // computeAdvisorStats / "Mi Dashboard").
         `SELECT COUNT(*) as c FROM (
            SELECT a.id
            FROM public.advisors a
+           LEFT JOIN public.teams t ON t.id = a.team_id
            LEFT JOIN LATERAL (
              SELECT * FROM public.fact_ama_asesor f
              WHERE f.id_asesor = a.id AND f.estatus_ama <> 'Reiniciado'
@@ -189,12 +200,18 @@ export class DashboardService {
              SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
              FROM public.commissions c
              JOIN public.operations o ON o.id = c.operation_id
-             WHERE c.advisor_id = a.id AND c.type = 'cierre' AND o.status <> 'Cancelado'
-               AND (fa.fecha_inicio_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre >= fa.fecha_inicio_periodo)
-               AND (fa.fecha_fin_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre <= fa.fecha_fin_periodo)
+             WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
+               AND (
+                 (a.team_id IS NOT NULL AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+                 OR (a.team_id IS NULL AND c.advisor_id = a.id)
+               )
+               -- El filtro de periodo solo aplica a asesores individuales; el
+               -- acumulado de team es histórico completo (igual que computeAdvisorStats).
+               AND (a.team_id IS NOT NULL OR fa.fecha_inicio_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre >= fa.fecha_inicio_periodo)
+               AND (a.team_id IS NOT NULL OR fa.fecha_fin_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre <= fa.fecha_fin_periodo)
            ) acc ON true
            WHERE a.status IN ('Activo', 'En mentoría') ${filters.idAsesor ? 'AND a.id = @fIdAsesor' : ''}
-             AND fa.meta_ama > 0 AND acc.acumulado >= fa.meta_ama
+             AND COALESCE(t.meta_ama, fa.meta_ama) > 0 AND acc.acumulado >= COALESCE(t.meta_ama, fa.meta_ama)
          ) x`,
         filters.idAsesor ? { fIdAsesor: filters.idAsesor } : {},
       ),
@@ -227,6 +244,7 @@ export class DashboardService {
   }
 
   async getCharts(filters: DashboardFilters = {}) {
+    await this.ensureAmaPeriodsCurrent();
     const opO = this.opFilterAliased('o', filters, { estatus: true });
     const op = this.opFilter(filters, { estatus: true });
     const advF = this.advisorFilter(filters);
@@ -293,15 +311,18 @@ export class DashboardService {
       ),
 
       // Avance AMA — calculado EN VIVO desde comisiones, con dedup al periodo vigente.
+      // Si el asesor pertenece a un team, la meta y el acumulado son COMPARTIDOS
+      // entre todos los integrantes (misma regla que computeAdvisorStats / "Mi Dashboard").
       this.databaseService.query<any>(
         `
-        SELECT a.id, a.name, fa.meta_ama, fa.estatus_ama,
+        SELECT a.id, a.name, COALESCE(t.meta_ama, fa.meta_ama) AS meta_ama, fa.estatus_ama,
                COALESCE(acc.acumulado, 0) AS monto_acumulado,
-               CASE WHEN fa.meta_ama > 0
-                    THEN ROUND((COALESCE(acc.acumulado, 0) / fa.meta_ama) * 100, 2)
+               CASE WHEN COALESCE(t.meta_ama, fa.meta_ama) > 0
+                    THEN ROUND((COALESCE(acc.acumulado, 0) / COALESCE(t.meta_ama, fa.meta_ama)) * 100, 2)
                     ELSE 0 END AS avance_pct,
-               (fa.meta_ama > 0 AND COALESCE(acc.acumulado, 0) >= fa.meta_ama) AS ama_alcanzada
+               (COALESCE(t.meta_ama, fa.meta_ama) > 0 AND COALESCE(acc.acumulado, 0) >= COALESCE(t.meta_ama, fa.meta_ama)) AS ama_alcanzada
         FROM public.advisors a
+        LEFT JOIN public.teams t ON t.id = a.team_id
         LEFT JOIN LATERAL (
           SELECT * FROM public.fact_ama_asesor f
           WHERE f.id_asesor = a.id AND f.estatus_ama <> 'Reiniciado'
@@ -311,9 +332,15 @@ export class DashboardService {
           SELECT COALESCE(SUM(c.monto_neto_asesor), 0) as acumulado
           FROM public.commissions c
           JOIN public.operations o ON o.id = c.operation_id
-          WHERE c.advisor_id = a.id AND c.type = 'cierre' AND o.status <> 'Cancelado'
-            AND (fa.fecha_inicio_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre >= fa.fecha_inicio_periodo)
-            AND (fa.fecha_fin_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre <= fa.fecha_fin_periodo)
+          WHERE c.type = 'cierre' AND o.status <> 'Cancelado'
+            AND (
+              (a.team_id IS NOT NULL AND c.advisor_id IN (SELECT id FROM public.advisors WHERE team_id = a.team_id))
+              OR (a.team_id IS NULL AND c.advisor_id = a.id)
+            )
+            -- El filtro de periodo solo aplica a asesores individuales; el
+            -- acumulado de team es histórico completo (igual que computeAdvisorStats).
+            AND (a.team_id IS NOT NULL OR fa.fecha_inicio_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre >= fa.fecha_inicio_periodo)
+            AND (a.team_id IS NOT NULL OR fa.fecha_fin_periodo IS NULL OR o.fecha_cierre IS NULL OR o.fecha_cierre <= fa.fecha_fin_periodo)
         ) acc ON true
         WHERE a.status IN ('Activo', 'En mentoría') ${advF.sql}
         ORDER BY avance_pct DESC NULLS LAST
@@ -510,6 +537,7 @@ export class DashboardService {
   }
 
   private async computeAdvisorStats(advisorId: string | undefined) {
+    await this.ensureAmaPeriodsCurrent();
     if (!advisorId) {
       return {
         cierresMes: 0,
