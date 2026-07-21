@@ -585,6 +585,7 @@ export class OperationsService {
     teamId?: string;
     status?: string;
     type?: string;
+    operationId?: string;
     page?: number;
     limit?: number;
   }) {
@@ -609,6 +610,10 @@ export class OperationsService {
     if (filters.type) {
       clauses.push('c.type = @type');
       params.type = filters.type;
+    }
+    if (filters.operationId) {
+      clauses.push('c.operation_id = @operationId');
+      params.operationId = filters.operationId;
     }
     const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
 

@@ -199,6 +199,7 @@ class FindOperationsQueryDto extends PaginationQueryDto {
 class FindCommissionsQueryDto extends PaginationQueryDto {
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) advisorId?: string;
   @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) status?: string;
+  @IsOptional() @IsString() @MaxLength(MAX_TEXTO_CORTO) operationId?: string;
   @IsOptional()
   @EmptyToUndefined()
   @IsIn(['cierre', 'invitacion', 'mentoria'])
@@ -256,6 +257,7 @@ export class OperationsController {
       teamId,
       status: query.status,
       type: query.type,
+      operationId: query.operationId,
       page: query.page ?? 1,
       limit: query.limit ?? 20,
     });

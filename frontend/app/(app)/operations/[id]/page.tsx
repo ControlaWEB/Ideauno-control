@@ -102,7 +102,10 @@ export default function OperationDetailPage() {
 
   const { data: commData } = useQuery({
     queryKey: ['operation-commissions', id],
-    queryFn: () => api.get('/operations/commissions', { params: { operationId: id } }).then(r => r.data?.data ?? r.data),
+    queryFn: () =>
+      api
+        .get('/operations/commissions', { params: { operationId: id, type: 'cierre' } })
+        .then(r => (r.data?.data ?? r.data ?? [])[0]),
     enabled: !!id,
   });
 

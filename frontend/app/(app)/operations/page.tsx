@@ -198,7 +198,11 @@ export default function OperationsPage() {
                   const pldOk = op.pld_expediente_completo === 'true' || op.pld_expediente_completo === true;
                   const pldFlag = Number(op.precio_final_cierre || 0) >= 941412.75;
                   return (
-                    <tr key={op.id}>
+                    <tr
+                      key={op.id}
+                      style={{ cursor: 'pointer' }}
+                      onClick={() => router.push(`/operations/${op.id}`)}
+                    >
                       <td>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>{op.code}</div>
                         <div style={{ fontSize: 11, color: 'var(--color-on-surface-variant)' }}>
@@ -218,7 +222,11 @@ export default function OperationsPage() {
                       </td>
                       <td><span className={`badge ${s.class}`}>{s.icon} {s.label}</span></td>
                       <td>
-                        <button className="btn btn-ghost" style={{ padding: '5px 8px' }} onClick={() => setViewOp(op)}>
+                        <button
+                          className="btn btn-ghost"
+                          style={{ padding: '5px 8px' }}
+                          onClick={(e) => { e.stopPropagation(); setViewOp(op); }}
+                        >
                           <Eye size={14} />
                         </button>
                       </td>
