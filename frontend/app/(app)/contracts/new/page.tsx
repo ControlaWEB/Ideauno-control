@@ -408,6 +408,13 @@ export default function NewContractPage() {
   const isCompraventa   = tipoSolicitud === 'Promesa compraventa';
   const isArrendamiento = tipoSolicitud === 'Contrato arrendamiento';
 
+  // El contrato de compraventa solo aplica a propiedades en Venta; el de
+  // arrendamiento solo a las de Renta. Se filtra el selector por tipo_operacion.
+  const tipoOperacionEsperado = isCompraventa ? 'Venta' : 'Renta';
+  const propertiesFiltradas = properties.filter(
+    (p: any) => (p.tipo_operacion ?? p.tipoOperacion) === tipoOperacionEsperado,
+  );
+
   return (
     <>
       <Header />
@@ -440,12 +447,17 @@ export default function NewContractPage() {
               <label className="input-label">Propiedad *</label>
               <select {...register('idPropiedad')} className="select">
                 <option value="">— Seleccionar propiedad —</option>
-                {properties.map((p: any) => (
+                {propertiesFiltradas.map((p: any) => (
                   <option key={p.id} value={p.id}>
                     {p.address ?? p.title ?? p.nombre} ({p.city ?? p.ciudad ?? '—'})
                   </option>
                 ))}
               </select>
+              {propertiesFiltradas.length === 0 && (
+                <span style={{ fontSize: 11.5, color: 'var(--color-on-surface-variant)', display: 'block', marginTop: 4 }}>
+                  No hay propiedades en {isCompraventa ? 'venta' : 'renta'} disponibles.
+                </span>
+              )}
               <Err msg={errors.idPropiedad?.message} />
             </div>
 
