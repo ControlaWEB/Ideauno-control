@@ -4,11 +4,14 @@ import { useAuthStore } from '@/store/auth.store';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Sidebar } from '@/components/sidebar';
+import { useIdleLogout } from '@/hooks/use-idle-logout';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
   const [hydrated, setHydrated] = useState(false);
+
+  useIdleLogout();
 
   useEffect(() => {
     setHydrated(true);
