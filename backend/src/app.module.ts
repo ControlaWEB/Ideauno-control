@@ -15,6 +15,8 @@ import { ContractsModule } from './modules/contracts/contracts.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { TemplatesModule } from './modules/templates/templates.module';
 import { TeamsModule } from './modules/teams/teams.module';
+import { HealthController } from './health/health.controller';
+import { DbKeepAliveService } from './health/db-keepalive.service';
 
 @Module({
   imports: [
@@ -34,9 +36,12 @@ import { TeamsModule } from './modules/teams/teams.module';
     TemplatesModule,
     TeamsModule,
   ],
+  controllers: [HealthController],
   providers: [
     // Aplica el rate limiting configurado arriba a todos los endpoints
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    // Evita que Supabase (plan Free) pause la BD por inactividad
+    DbKeepAliveService,
   ],
 })
 export class AppModule {}

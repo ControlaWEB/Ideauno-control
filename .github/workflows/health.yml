@@ -1,0 +1,28 @@
+name: Health check
+
+# Cada 6 h pide GET /api/health al backend de producción (hace SELECT 1 en
+# Supabase). Si falla, GitHub manda correo: avisa si la app o la BD se caen.
+# También suma actividad para que Supabase no pause la BD; el mecanismo
+# principal es el latido interno del backend (db-keepalive.service.ts).
+# Ojo: en repos públicos GitHub apaga los cron tras 60 días sin commits
+# (avisa por correo antes); se reactiva desde la pestaña Actions.
+on:
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    name: GET /api/health
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # Variable opcional del repo (Settings → Variables) si cambia la URL.
+      HEALTH_URL: ${{ vars.HEALTH_URL || 'https://backend-production-8f002.up.railway.app/api/health' }}
+    steps:
+      - run: >
+          curl --fail-with-body --silent --show-error
+          --retry 3 --retry-delay 30 --retry-all-errors --max-time 30
+          "$HEALTH_URL"
